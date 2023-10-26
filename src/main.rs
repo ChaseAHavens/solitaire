@@ -4,6 +4,7 @@ use bevy_inspector_egui::{
     bevy_inspector::hierarchy::SelectedEntities, DefaultInspectorConfigPlugin,
 };
 use bevy_window::PrimaryWindow;
+mod inspector;
 
 use rand::Rng;
 use rand::prelude::IteratorRandom;
@@ -15,6 +16,7 @@ fn main() {
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
         .add_plugins(EguiPlugin)
         .add_plugins(DefaultInspectorConfigPlugin)
+        .add_plugins(crate::inspector::inspector::InspectorPlugin)
         .register_type::<CardSuit>()
         .register_type::<CardColor>()
         .register_type::<Card>()
@@ -33,40 +35,40 @@ fn main() {
                 card_face_up,
                 card_back_up,
                 //_spin_spinnners,
-                inspector_ui.run_if(input_toggle_active(true, KeyCode::Escape)),
+                //inspector_ui.run_if(input_toggle_active(true, KeyCode::Escape)),
             ),
         )
         .run();
 }
-
+/*
 fn inspector_ui(world: &mut World, mut selected_entities: Local<SelectedEntities>) {
     let mut egui_context = world
-        .query_filtered::<&mut EguiContext, With<PrimaryWindow>>()
-        .single(world)
-        .clone();
+    .query_filtered::<&mut EguiContext, With<PrimaryWindow>>()
+    .single(world)
+    .clone();
     egui::SidePanel::left("hierarchy")
         .default_width(200.0)
         .show(egui_context.get_mut(), |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.heading("Hierarchy");
-
+                
                 bevy_inspector_egui::bevy_inspector::hierarchy::hierarchy_ui(
                     world,
                     ui,
                     &mut selected_entities,
                 );
-
+                
                 ui.label("Press escape to toggle UI");
                 ui.allocate_space(ui.available_size());
             });
         });
-
-    egui::SidePanel::right("inspector")
+        
+        egui::SidePanel::right("inspector")
         .default_width(250.0)
         .show(egui_context.get_mut(), |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.heading("Inspector");
-
+                
                 match selected_entities.as_slice() {
                     &[entity] => {
                         bevy_inspector_egui::bevy_inspector::ui_for_entity(world, entity, ui);
@@ -77,21 +79,22 @@ fn inspector_ui(world: &mut World, mut selected_entities: Local<SelectedEntities
                         );
                     }
                 }
-
+                
                 ui.allocate_space(ui.available_size());
             });
         });
-}
-
-#[derive(Reflect, Clone, Copy, Debug)]
-pub enum CardSuit {
-    Hearts,
-    Spades,
-    Diamonds,
-    Clubs,
-}
-#[derive(Reflect, Clone, Copy, Debug)]
-pub enum CardColor {
+    }
+    */
+    
+    #[derive(Reflect, Clone, Copy, Debug)]
+    pub enum CardSuit {
+        Hearts,
+        Spades,
+        Diamonds,
+        Clubs,
+    }
+    #[derive(Reflect, Clone, Copy, Debug)]
+    pub enum CardColor {
     Red,
     Black,
 }
