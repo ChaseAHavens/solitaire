@@ -21,7 +21,7 @@ pub struct Card {
     pub color: CardColor,
 }
 
-#[derive(Component)]
+#[derive(Component, Reflect, Clone, Copy, Debug)]
 pub struct CardSlot;
 
 #[derive(Component)]

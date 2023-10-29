@@ -22,9 +22,10 @@ fn main() {
         .register_type::<components::cards::Card>()
         .register_type::<MoveCardsWtihDelay>()
         .register_type::<u128>()
+        .register_type::<CardSlotPositions>()
         .insert_resource(components::cards::Cards { cards: Vec::new() })
         .insert_resource(components::cards::CurrentCard(0))
-        .add_systems(Startup, setup)
+        .add_systems(Startup, (setup, generate_board))
         .add_systems(
             Update,
             (
@@ -34,6 +35,94 @@ fn main() {
             ),
         )
         .run();
+}
+
+#[derive(Reflect, Clone, Copy, Debug)]
+struct Slot {
+    position: Vec2,
+    slot: components::cards::CardSlot,
+}
+
+#[derive(Reflect, Clone, Copy, Debug)]
+struct CardSlotPositions {
+    stock_pile: Option<Slot>,
+    waste_pile: Option<Slot>,
+    foundations: [Option<Slot>; 4],
+    tableau: [Option<Slot>; 7],
+}
+
+impl CardSlotPositions {
+    fn new() -> CardSlotPositions {
+        CardSlotPositions {
+            stock_pile: None,
+            waste_pile: None,
+            foundations: [None, None, None, None],
+            tableau: [None, None, None, None, None, None, None],
+        }
+    }
+}
+
+const BOARD_POSITION_OFFSET: Vec2 = Vec2::new(-400.0, 310.0);
+const PADDING: f32 = 7.0;
+
+fn generate_board(mut commands: Commands) {
+    let mut pos: CardSlotPositions = CardSlotPositions::new();
+    let card_width = crate::components::cards::CARD_SIZE.x;
+    let card_spacing = Vec2::new(card_width + PADDING, 0.0);
+    let board_width = (card_width * 7.0) + (PADDING * 6.0);
+    let p = Vec2::new(board_width / -2.0, 0.0);
+    let s = spawn_slot(p);
+    pos.stock_pile = Some(Slot {
+        position: p,
+        slot: s.1,
+    });
+    commands.spawn(s);
+    let p = p + card_spacing;
+    let s = spawn_slot(p);
+    pos.waste_pile = Some(Slot {
+        position: p,
+        slot: s.1,
+    });
+    commands.spawn(s);
+    let p = p + card_spacing;
+    let p = p + card_spacing;
+    for i in 0..4 {
+        let p = p + (card_spacing * i as f32);
+        let s = spawn_slot(p);
+        pos.foundations[i] = Some(Slot {
+            position: p,
+            slot: s.1,
+        });
+        commands.spawn(s);
+    }
+    //second row
+    let p = Vec2::new(
+        board_width / -2.0,
+        -(crate::components::cards::CARD_SIZE.y + PADDING),
+    );
+    for i in 0..7 {
+        let p = p + (card_spacing * i as f32);
+        let s = spawn_slot(p);
+        pos.tableau[i] = Some(Slot {
+            position: p,
+            slot: s.1,
+        });
+        commands.spawn(s);
+    }
+}
+
+fn spawn_slot(pos: Vec2) -> (SpatialBundle, components::cards::CardSlot) {
+    let slot: components::cards::CardSlot = components::cards::CardSlot;
+    (
+        bevy::prelude::SpatialBundle {
+            transform: Transform {
+                translation: Vec3::new(pos.x, pos.y, 0.0),
+                ..default()
+            },
+            ..default()
+        },
+        slot,
+    )
 }
 
 #[derive(Reflect, Clone, Copy, Debug)]
@@ -67,7 +156,13 @@ fn move_cards_with_delay(
         let c = ca.as_mut();
         let stx: Vec<(Entity, &Transform)> = slots.iter().map(|x| (x.0, x.1)).collect();
 
-        let random_slot: Option<Entity> = Some(slots.iter().choose(rng).unwrap().0);
+        let random_slot: Option<Entity> = Some(
+            slots
+                .iter()
+                .choose(rng)
+                .expect("Got a none while choosing a random slot.")
+                .0,
+        );
         match c.moving {
             MoveState::StartMove => {
                 start_new_move(tx, random_slot, c, current_time, rng);
@@ -94,8 +189,12 @@ fn move_cards_with_delay(
     ) {
         let slot_position_of_current_card = slots
             .iter()
-            .find(|x| x.0 == c.target.unwrap())
-            .unwrap()
+            .find(|x| {
+                x.0 == c
+                    .target
+                    .expect("Got a none while trying to unwrap in Moving_stuff")
+            })
+            .expect("Got a none trying to unwrap an (&entity, &transform) in moving_stuff")
             .1
             .translation;
         let percent_of_move_done: f32 = (t - c.time_at_start_of_move) as f32
@@ -201,24 +300,24 @@ fn setup(
     commands.spawn(Camera2dBundle::default());
 
     let rng = &mut rand::thread_rng();
-
-    for _ in 0..10 {
-        commands.spawn((
-            SpatialBundle {
-                transform: Transform {
-                    translation: Vec3::new(
-                        rng.gen_range(-300.0..=300.0),
-                        rng.gen_range(-300.0..=300.0),
-                        0.0,
-                    ),
+    /*
+        for _ in 0..10 {
+            commands.spawn((
+                SpatialBundle {
+                    transform: Transform {
+                        translation: Vec3::new(
+                            rng.gen_range(-300.0..=300.0),
+                            rng.gen_range(-300.0..=300.0),
+                            0.0,
+                        ),
+                        ..default()
+                    },
                     ..default()
                 },
-                ..default()
-            },
-            components::cards::CardSlot,
-        ));
-    }
-
+                components::cards::CardSlot,
+            ));
+        }
+    */
     for i in 0..52 {
         let texture_handle = asset_server.load("cards.png");
         let texture_atlas = TextureAtlas::from_grid(
