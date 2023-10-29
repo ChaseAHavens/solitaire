@@ -1,15 +1,13 @@
-use bevy::{input::common_conditions::input_toggle_active, prelude::KeyCode, prelude::*};
-use bevy_egui::{EguiContext, EguiPlugin};
-use bevy_inspector_egui::{
-    bevy_inspector::hierarchy::SelectedEntities, DefaultInspectorConfigPlugin,
-};
-use bevy_window::PrimaryWindow;
+use bevy::{prelude::KeyCode, prelude::*};
+use bevy_egui::EguiPlugin;
+use bevy_inspector_egui::DefaultInspectorConfigPlugin;
+//use bevy_window::PrimaryWindow;
 mod inspector;
 
-use rand::Rng;
 use rand::prelude::IteratorRandom;
+use rand::Rng;
 
-const CARD_SIZE:Vec2 = Vec2::new(53.0, 70.0);
+const CARD_SIZE: Vec2 = Vec2::new(53.0, 70.0);
 
 fn main() {
     App::new()
@@ -32,7 +30,8 @@ fn main() {
                 move_cards_with_delay,
                 //_test_system,
                 keyboard_input,
-                card_face_up, card_back_up,
+                card_face_up,
+                card_back_up,
                 //_spin_spinnners,
                 //inspector_ui.run_if(input_toggle_active(true, KeyCode::Escape)),
             ),
@@ -50,24 +49,24 @@ fn inspector_ui(world: &mut World, mut selected_entities: Local<SelectedEntities
         .show(egui_context.get_mut(), |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.heading("Hierarchy");
-                
+
                 bevy_inspector_egui::bevy_inspector::hierarchy::hierarchy_ui(
                     world,
                     ui,
                     &mut selected_entities,
                 );
-                
+
                 ui.label("Press escape to toggle UI");
                 ui.allocate_space(ui.available_size());
             });
         });
-        
+
         egui::SidePanel::right("inspector")
         .default_width(250.0)
         .show(egui_context.get_mut(), |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.heading("Inspector");
-                
+
                 match selected_entities.as_slice() {
                     &[entity] => {
                         bevy_inspector_egui::bevy_inspector::ui_for_entity(world, entity, ui);
@@ -78,22 +77,22 @@ fn inspector_ui(world: &mut World, mut selected_entities: Local<SelectedEntities
                         );
                     }
                 }
-                
+
                 ui.allocate_space(ui.available_size());
             });
         });
     }
     */
-    
-    #[derive(Reflect, Clone, Copy, Debug)]
-    pub enum CardSuit {
-        Hearts,
-        Spades,
-        Diamonds,
-        Clubs,
-    }
-    #[derive(Reflect, Clone, Copy, Debug)]
-    pub enum CardColor {
+
+#[derive(Reflect, Clone, Copy, Debug)]
+pub enum CardSuit {
+    Hearts,
+    Spades,
+    Diamonds,
+    Clubs,
+}
+#[derive(Reflect, Clone, Copy, Debug)]
+pub enum CardColor {
     Red,
     Black,
 }
@@ -132,82 +131,121 @@ struct Spinner {
 */
 
 #[derive(Reflect, Clone, Copy, Debug)]
-enum MoveState{
+enum MoveState {
     StartMove,
     Moving,
     EndMove,
     Waiting,
 }
 
-#[derive(Component,Reflect, Clone, Copy, Debug)]
-pub struct MoveCardsWtihDelay{
+#[derive(Component, Reflect, Clone, Copy, Debug)]
+pub struct MoveCardsWtihDelay {
     target: Option<Entity>,
     start_position: Vec2,
     moving: MoveState,
     time_at_start_of_move: u128,
-    time_before_next_move: u128, 
+    time_before_next_move: u128,
     time_to_finish_move: u128,
     rotation_freqs: (i8, i8, i8),
 }
 
-fn move_cards_with_delay(   time: Res<Time>,
-                            mut move_card: Query<(&mut Transform, &mut MoveCardsWtihDelay)>,
-                            slots: Query<(Entity, &Transform, &CardSlot), Without<MoveCardsWtihDelay>>,)
-{
+fn move_cards_with_delay(
+    time: Res<Time>,
+    mut move_card: Query<(&mut Transform, &mut MoveCardsWtihDelay)>,
+    slots: Query<(Entity, &Transform, &CardSlot), Without<MoveCardsWtihDelay>>,
+) {
     let rng = &mut rand::thread_rng();
-    let current_time =  time.elapsed().as_millis();    
-    for (mut txa, mut ca) in &mut move_card.iter_mut(){
+    let current_time = time.elapsed().as_millis();
+    for (mut txa, mut ca) in &mut move_card.iter_mut() {
         let tx = txa.as_mut();
         let c = ca.as_mut();
-        let stx: Vec<(Entity, &Transform)> = slots.iter().map(|x|{(x.0, x.1)}).collect();
+        let stx: Vec<(Entity, &Transform)> = slots.iter().map(|x| (x.0, x.1)).collect();
 
-        let random_slot: Option<Entity> = Some(slots.iter().choose(rng).unwrap().0); 
-        match c.moving{
-            MoveState::StartMove => { start_new_move(tx, random_slot, c, current_time, rng); }
-            MoveState::Moving => { moving_stuff(tx, stx, c, current_time); }
-            MoveState::EndMove =>{
+        let random_slot: Option<Entity> = Some(slots.iter().choose(rng).unwrap().0);
+        match c.moving {
+            MoveState::StartMove => {
+                start_new_move(tx, random_slot, c, current_time, rng);
+            }
+            MoveState::Moving => {
+                moving_stuff(tx, stx, c, current_time);
+            }
+            MoveState::EndMove => {
                 c.time_before_next_move = current_time + rng.gen_range(1000..2000);
                 c.moving = MoveState::Waiting;
             }
-            MoveState::Waiting =>{
+            MoveState::Waiting => {
                 if c.time_before_next_move >= current_time {
                     c.moving = MoveState::StartMove;
                 }
             }
         }
     }
-    fn moving_stuff(tx:&mut Transform, slots:Vec<(Entity, &Transform)>, c:&mut MoveCardsWtihDelay, t:u128 ){
-        let slot_position_of_current_card = slots.iter().find(|x|{x.0 == c.target.unwrap()}).unwrap().1.translation;
-        let percent_of_move_done:f32 = (t- c.time_at_start_of_move) as f32 / (c.time_to_finish_move - c.time_at_start_of_move) as f32;
-        let location:Vec2 = c.start_position.lerp(slot_position_of_current_card.truncate(), percent_of_move_done);
+    fn moving_stuff(
+        tx: &mut Transform,
+        slots: Vec<(Entity, &Transform)>,
+        c: &mut MoveCardsWtihDelay,
+        t: u128,
+    ) {
+        let slot_position_of_current_card = slots
+            .iter()
+            .find(|x| x.0 == c.target.unwrap())
+            .unwrap()
+            .1
+            .translation;
+        let percent_of_move_done: f32 = (t - c.time_at_start_of_move) as f32
+            / (c.time_to_finish_move - c.time_at_start_of_move) as f32;
+        let location: Vec2 = c.start_position.lerp(
+            slot_position_of_current_card.truncate(),
+            percent_of_move_done,
+        );
         tx.translation = location.extend(tx.translation.z);
-        let x = (c.rotation_freqs.0 as f32 * (percent_of_move_done *360.0)) % 360.0;
-        let y = (c.rotation_freqs.1 as f32 * (percent_of_move_done *360.0)) % 360.0;
-        let z = (c.rotation_freqs.2 as f32 * (percent_of_move_done *360.0)) % 360.0;
-        tx.rotation = Quat::from_euler(EulerRot::XYZ, x.to_radians(), y.to_radians(), z.to_radians());
-        if c.time_to_finish_move <= t { c.moving = MoveState::EndMove; }
+        let x = (c.rotation_freqs.0 as f32 * (percent_of_move_done * 360.0)) % 360.0;
+        let y = (c.rotation_freqs.1 as f32 * (percent_of_move_done * 360.0)) % 360.0;
+        let z = (c.rotation_freqs.2 as f32 * (percent_of_move_done * 360.0)) % 360.0;
+        tx.rotation = Quat::from_euler(
+            EulerRot::XYZ,
+            x.to_radians(),
+            y.to_radians(),
+            z.to_radians(),
+        );
+        if c.time_to_finish_move <= t {
+            c.moving = MoveState::EndMove;
+        }
     }
-    fn start_new_move(tx:&mut Transform, e:Option<Entity>, c:&mut MoveCardsWtihDelay, t:u128, r:&mut rand::rngs::ThreadRng){
+    fn start_new_move(
+        tx: &mut Transform,
+        e: Option<Entity>,
+        c: &mut MoveCardsWtihDelay,
+        t: u128,
+        r: &mut rand::rngs::ThreadRng,
+    ) {
         c.target = e;
         c.time_at_start_of_move = t;
         c.time_before_next_move = t + r.gen_range(1000..2000);
-        c.time_to_finish_move = t +  r.gen_range(2000..3000);
+        c.time_to_finish_move = t + r.gen_range(2000..3000);
         c.start_position = tx.translation.truncate();
         c.moving = MoveState::Moving;
     }
-
 }
 
 fn card_face_up(mut cards: Query<(&mut Visibility, &mut GlobalTransform, &CardFront)>) {
     for (mut vis, tx, _) in cards.iter_mut() {
-        let dot = (tx.back()).dot(Vec3::Z); 
-        *vis = if dot > 0.0 { Visibility::Visible } else { Visibility::Hidden };
+        let dot = (tx.back()).dot(Vec3::Z);
+        *vis = if dot > 0.0 {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
     }
 }
 fn card_back_up(mut cards: Query<(&mut Visibility, &mut GlobalTransform, &CardBack)>) {
     for (mut vis, tx, _) in cards.iter_mut() {
         let dot = (tx.back()).dot(Vec3::Z);
-        *vis = if dot < 0.0 { Visibility::Visible } else { Visibility::Hidden };
+        *vis = if dot < 0.0 {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
     }
 }
 /*
@@ -220,21 +258,23 @@ fn _spin_spinnners(time: Res<Time>, mut cards: Query<(&mut Transform, &Spinner, 
 //}
 */
 
-fn _test_system( time: Res<Time>,
-                mut set: ParamSet<(
-                    Query<(&mut Transform, &Card)>,
-                    Query<(&Transform, &CardSlot)>)>
-                ){
+fn _test_system(
+    time: Res<Time>,
+    mut set: ParamSet<(
+        Query<(&mut Transform, &Card)>,
+        Query<(&Transform, &CardSlot)>,
+    )>,
+) {
     let slots;
     {
         let binding = set.p1();
-        slots = binding.iter().nth(0).expect("fuck").0.clone();
+        slots = binding.iter().next().expect("fuck").0.clone();
     }
     let mut cards = set.p0();
-    for (mut t, _) in cards.iter_mut(){
+    for (mut t, _) in cards.iter_mut() {
         let diff = t.translation - slots.translation;
         let dir = diff.normalize();
-        t.translation = t.translation - (dir * 50.0 * time.delta_seconds());
+        t.translation -= dir * 50.0 * time.delta_seconds();
     }
 }
 
@@ -261,7 +301,7 @@ fn keyboard_input(
         println!("after up {}", index);
     }
     if keys.just_pressed(KeyCode::Right) {
-        let t = it.nth(index.clone());
+        let t = it.nth(index);
         let temp = t.expect("shit");
         let (mut temp2, _) = temp;
         println!("{:?}", temp2);
@@ -283,14 +323,9 @@ fn keyboard_input(
     commands.insert_resource(CurrentCard(index));
 }
 
-fn gizmo_update(mut gizmos: Gizmos, mut giz: Query<(&mut Transform, &CardSlot)>){
-    for(t, _) in giz.iter_mut() {
-        gizmos.rect(
-            t.translation,
-            t.rotation,
-            CARD_SIZE,
-            Color::RED,
-        );
+fn gizmo_update(mut gizmos: Gizmos, mut giz: Query<(&mut Transform, &CardSlot)>) {
+    for (t, _) in giz.iter_mut() {
+        gizmos.rect(t.translation, t.rotation, CARD_SIZE, Color::RED);
     }
 }
 
@@ -303,16 +338,23 @@ fn setup(
 
     let rng = &mut rand::thread_rng();
 
-    for _ in 0..10{
-        commands.spawn((SpatialBundle{
-            transform: Transform{
-                translation: Vec3::new( rng.gen_range(-300.0..=300.0), rng.gen_range(-300.0..=300.0),0.0),
+    for _ in 0..10 {
+        commands.spawn((
+            SpatialBundle {
+                transform: Transform {
+                    translation: Vec3::new(
+                        rng.gen_range(-300.0..=300.0),
+                        rng.gen_range(-300.0..=300.0),
+                        0.0,
+                    ),
+                    ..default()
+                },
                 ..default()
             },
-            ..default()    
-        },CardSlot,));
+            CardSlot,
+        ));
     }
-        
+
     for i in 0..52 {
         let texture_handle = asset_server.load("cards.png");
         let texture_atlas = TextureAtlas::from_grid(
@@ -352,13 +394,14 @@ fn setup(
         let c: Card = Card {
             index: i + 1,
             number: (i % 13) + 1,
-            suit: suit,
-            color: color,
+            suit,
+            color,
         };
         let initial_position: Vec3 = Vec3::new(
             rng.gen_range(-300.0..=300.0),
             rng.gen_range(-300.0..=300.0),
-            rng.gen_range(-300.0..=300.0));
+            rng.gen_range(-300.0..=300.0),
+        );
         commands
             .spawn((
                 SpatialBundle {
@@ -368,7 +411,7 @@ fn setup(
                     },
                     ..default()
                 },
-                c.clone(),
+                c,
                 /*
                 Spinner {
                     x: rng.gen_range(-3.0..=3.0),
@@ -376,7 +419,7 @@ fn setup(
                     z: rng.gen_range(-3.0..=3.0),
                 //},
                 */
-                MoveCardsWtihDelay{
+                MoveCardsWtihDelay {
                     target: None,
                     start_position: initial_position.truncate(),
                     moving: MoveState::StartMove,
@@ -386,7 +429,7 @@ fn setup(
                     rotation_freqs: (
                         rng.gen_range(-1..=1),
                         rng.gen_range(-1..=1),
-                        0,//rng.gen_range(0..=1),
+                        0, //rng.gen_range(0..=1),
                     ),
                 },
             ))
@@ -395,7 +438,7 @@ fn setup(
                     SpriteSheetBundle {
                         texture_atlas: texture_atlas_handle,
                         sprite: TextureAtlasSprite {
-                            index: i.clone(),
+                            index: i,
                             ..default()
                         },
                         ..default()
