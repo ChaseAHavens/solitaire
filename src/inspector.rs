@@ -1,4 +1,4 @@
-pub mod inspector {
+pub mod inspect {
     use bevy::{input::common_conditions::input_toggle_active, prelude::KeyCode, prelude::*};
     use bevy_egui::EguiContext;
     use bevy_inspector_egui::bevy_inspector::hierarchy::SelectedEntities;
@@ -59,3 +59,4 @@ pub mod inspector {
             });
     }
 }
+

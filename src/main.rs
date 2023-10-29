@@ -14,7 +14,7 @@ fn main() {
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
         .add_plugins(EguiPlugin)
         .add_plugins(DefaultInspectorConfigPlugin)
-        .add_plugins(crate::inspector::inspector::InspectorPlugin)
+        .add_plugins(crate::inspector::inspect::InspectorPlugin)
         .register_type::<CardSuit>()
         .register_type::<CardColor>()
         .register_type::<Card>()
@@ -260,19 +260,12 @@ fn _spin_spinnners(time: Res<Time>, mut cards: Query<(&mut Transform, &Spinner, 
 
 fn _test_system(
     time: Res<Time>,
-    mut set: ParamSet<(
-        Query<(&mut Transform, &Card)>,
-        Query<(&Transform, &CardSlot)>,
-    )>,
+    mut cards: Query<(&mut Transform, &Card), Without<CardSlot>>,
+    slots: Query<(&Transform, &CardSlot), Without<Card>>,
 ) {
-    let slots;
-    {
-        let binding = set.p1();
-        slots = binding.iter().next().expect("fuck").0.clone();
-    }
-    let mut cards = set.p0();
+    let first_slot = slots.iter().next().expect("fuck").0;
     for (mut t, _) in cards.iter_mut() {
-        let diff = t.translation - slots.translation;
+        let diff = t.translation - first_slot.translation;
         let dir = diff.normalize();
         t.translation -= dir * 50.0 * time.delta_seconds();
     }
