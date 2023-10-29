@@ -2,31 +2,31 @@ use bevy::{prelude::KeyCode, prelude::*};
 use bevy_egui::EguiPlugin;
 use bevy_inspector_egui::DefaultInspectorConfigPlugin;
 //use bevy_window::PrimaryWindow;
+mod components;
 mod inspector;
-
+//mod components/cards;
+//use crate::components::cards;
 use rand::prelude::IteratorRandom;
 use rand::Rng;
-
-const CARD_SIZE: Vec2 = Vec2::new(53.0, 70.0);
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
         .add_plugins(EguiPlugin)
         .add_plugins(DefaultInspectorConfigPlugin)
-        .add_plugins(crate::inspector::inspect::InspectorPlugin)
-        .register_type::<CardSuit>()
-        .register_type::<CardColor>()
-        .register_type::<Card>()
+        .add_plugins(inspector::InspectorPlugin)
+        .register_type::<components::cards::CardSuit>()
+        .register_type::<components::cards::CardColor>()
+        .register_type::<components::cards::Card>()
         .register_type::<MoveCardsWtihDelay>()
         .register_type::<u128>()
-        .insert_resource(Cards { cards: Vec::new() })
-        .insert_resource(CurrentCard(0))
+        .insert_resource(components::cards::Cards { cards: Vec::new() })
+        .insert_resource(components::cards::CurrentCard(0))
         .add_systems(Startup, setup)
         .add_systems(
             Update,
             (
-                gizmo_update,
+                inspector::gizmo_update,
                 move_cards_with_delay,
                 //_test_system,
                 keyboard_input,
@@ -83,44 +83,6 @@ fn inspector_ui(world: &mut World, mut selected_entities: Local<SelectedEntities
         });
     }
     */
-
-#[derive(Reflect, Clone, Copy, Debug)]
-pub enum CardSuit {
-    Hearts,
-    Spades,
-    Diamonds,
-    Clubs,
-}
-#[derive(Reflect, Clone, Copy, Debug)]
-pub enum CardColor {
-    Red,
-    Black,
-}
-
-#[derive(Component, Reflect, Clone, Copy, Debug)]
-struct Card {
-    index: usize,
-    number: usize,
-    suit: CardSuit,
-    color: CardColor,
-}
-
-#[derive(Component)]
-struct CardSlot;
-
-#[derive(Component)]
-struct CardFront;
-#[derive(Component)]
-struct CardBack;
-
-#[derive(Resource, Reflect, Default)]
-struct Cards {
-    cards: Vec<Card>,
-}
-
-#[derive(Resource)]
-struct CurrentCard(usize);
-
 /*
 #[derive(Component)]
 struct Spinner {
@@ -152,7 +114,7 @@ pub struct MoveCardsWtihDelay {
 fn move_cards_with_delay(
     time: Res<Time>,
     mut move_card: Query<(&mut Transform, &mut MoveCardsWtihDelay)>,
-    slots: Query<(Entity, &Transform, &CardSlot), Without<MoveCardsWtihDelay>>,
+    slots: Query<(Entity, &Transform, &components::cards::CardSlot), Without<MoveCardsWtihDelay>>,
 ) {
     let rng = &mut rand::thread_rng();
     let current_time = time.elapsed().as_millis();
@@ -228,7 +190,13 @@ fn move_cards_with_delay(
     }
 }
 
-fn card_face_up(mut cards: Query<(&mut Visibility, &mut GlobalTransform, &CardFront)>) {
+fn card_face_up(
+    mut cards: Query<(
+        &mut Visibility,
+        &mut GlobalTransform,
+        &components::cards::CardFront,
+    )>,
+) {
     for (mut vis, tx, _) in cards.iter_mut() {
         let dot = (tx.back()).dot(Vec3::Z);
         *vis = if dot > 0.0 {
@@ -238,7 +206,13 @@ fn card_face_up(mut cards: Query<(&mut Visibility, &mut GlobalTransform, &CardFr
         };
     }
 }
-fn card_back_up(mut cards: Query<(&mut Visibility, &mut GlobalTransform, &CardBack)>) {
+fn card_back_up(
+    mut cards: Query<(
+        &mut Visibility,
+        &mut GlobalTransform,
+        &components::cards::CardBack,
+    )>,
+) {
     for (mut vis, tx, _) in cards.iter_mut() {
         let dot = (tx.back()).dot(Vec3::Z);
         *vis = if dot < 0.0 {
@@ -260,8 +234,11 @@ fn _spin_spinnners(time: Res<Time>, mut cards: Query<(&mut Transform, &Spinner, 
 
 fn _test_system(
     time: Res<Time>,
-    mut cards: Query<(&mut Transform, &Card), Without<CardSlot>>,
-    slots: Query<(&Transform, &CardSlot), Without<Card>>,
+    mut cards: Query<
+        (&mut Transform, &components::cards::Card),
+        Without<components::cards::CardSlot>,
+    >,
+    slots: Query<(&Transform, &components::cards::CardSlot), Without<components::cards::Card>>,
 ) {
     let first_slot = slots.iter().next().expect("fuck").0;
     for (mut t, _) in cards.iter_mut() {
@@ -274,8 +251,8 @@ fn _test_system(
 fn keyboard_input(
     mut commands: Commands,
     keys: Res<Input<KeyCode>>,
-    current: Res<CurrentCard>,
-    mut cards: Query<(&mut Transform, &mut Card)>,
+    current: Res<components::cards::CurrentCard>,
+    mut cards: Query<(&mut Transform, &mut components::cards::Card)>,
 ) {
     let the_cards = &mut cards; //.iter();
     let it = &mut the_cards.iter_mut();
@@ -313,15 +290,8 @@ fn keyboard_input(
     if keys.any_just_pressed([KeyCode::Delete, KeyCode::Back]) {
         // Either delete or backspace was just pressed
     }
-    commands.insert_resource(CurrentCard(index));
+    commands.insert_resource(components::cards::CurrentCard(index));
 }
-
-fn gizmo_update(mut gizmos: Gizmos, mut giz: Query<(&mut Transform, &CardSlot)>) {
-    for (t, _) in giz.iter_mut() {
-        gizmos.rect(t.translation, t.rotation, CARD_SIZE, Color::RED);
-    }
-}
-
 fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -344,7 +314,7 @@ fn setup(
                 },
                 ..default()
             },
-            CardSlot,
+            components::cards::CardSlot,
         ));
     }
 
@@ -352,7 +322,7 @@ fn setup(
         let texture_handle = asset_server.load("cards.png");
         let texture_atlas = TextureAtlas::from_grid(
             texture_handle,
-            CARD_SIZE,
+            components::cards::CARD_SIZE,
             13,
             4,
             Some(Vec2::new(3.0, 3.0)),
@@ -363,28 +333,28 @@ fn setup(
         let color;
         match i {
             (0..=12) => {
-                suit = CardSuit::Hearts;
-                color = CardColor::Red;
+                suit = components::cards::CardSuit::Hearts;
+                color = components::cards::CardColor::Red;
             }
             (13..=25) => {
-                suit = CardSuit::Spades;
-                color = CardColor::Black;
+                suit = components::cards::CardSuit::Spades;
+                color = components::cards::CardColor::Black;
             }
             (26..=39) => {
-                suit = CardSuit::Diamonds;
-                color = CardColor::Red;
+                suit = components::cards::CardSuit::Diamonds;
+                color = components::cards::CardColor::Red;
             }
             (40..=52) => {
-                suit = CardSuit::Clubs;
-                color = CardColor::Black;
+                suit = components::cards::CardSuit::Clubs;
+                color = components::cards::CardColor::Black;
             }
             _ => {
-                suit = CardSuit::Hearts;
-                color = CardColor::Black;
+                suit = components::cards::CardSuit::Hearts;
+                color = components::cards::CardColor::Black;
                 println!("got out of range when generating cards")
             }
         }
-        let c: Card = Card {
+        let c: components::cards::Card = components::cards::Card {
             index: i + 1,
             number: (i % 13) + 1,
             suit,
@@ -436,7 +406,7 @@ fn setup(
                         },
                         ..default()
                     },
-                    CardFront,
+                    components::cards::CardFront,
                 ));
             })
             .with_children(|parent| {
@@ -450,7 +420,7 @@ fn setup(
 
                         ..default()
                     },
-                    CardBack,
+                    components::cards::CardBack,
                 ));
             });
     }
