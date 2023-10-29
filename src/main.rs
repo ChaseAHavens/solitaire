@@ -4,6 +4,7 @@ use bevy_inspector_egui::DefaultInspectorConfigPlugin;
 //use bevy_window::PrimaryWindow;
 mod components;
 mod inspector;
+mod systems;
 //mod components/cards;
 //use crate::components::cards;
 use rand::prelude::IteratorRandom;
@@ -15,6 +16,7 @@ fn main() {
         .add_plugins(EguiPlugin)
         .add_plugins(DefaultInspectorConfigPlugin)
         .add_plugins(inspector::InspectorPlugin)
+        .add_plugins(crate::systems::cards::CardsPlugin)
         .register_type::<components::cards::CardSuit>()
         .register_type::<components::cards::CardColor>()
         .register_type::<components::cards::Card>()
@@ -30,8 +32,6 @@ fn main() {
                 move_cards_with_delay,
                 //_test_system,
                 keyboard_input,
-                card_face_up,
-                card_back_up,
                 //_spin_spinnners,
                 //inspector_ui.run_if(input_toggle_active(true, KeyCode::Escape)),
             ),
@@ -187,39 +187,6 @@ fn move_cards_with_delay(
         c.time_to_finish_move = t + r.gen_range(2000..3000);
         c.start_position = tx.translation.truncate();
         c.moving = MoveState::Moving;
-    }
-}
-
-fn card_face_up(
-    mut cards: Query<(
-        &mut Visibility,
-        &mut GlobalTransform,
-        &components::cards::CardFront,
-    )>,
-) {
-    for (mut vis, tx, _) in cards.iter_mut() {
-        let dot = (tx.back()).dot(Vec3::Z);
-        *vis = if dot > 0.0 {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        };
-    }
-}
-fn card_back_up(
-    mut cards: Query<(
-        &mut Visibility,
-        &mut GlobalTransform,
-        &components::cards::CardBack,
-    )>,
-) {
-    for (mut vis, tx, _) in cards.iter_mut() {
-        let dot = (tx.back()).dot(Vec3::Z);
-        *vis = if dot < 0.0 {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        };
     }
 }
 /*
