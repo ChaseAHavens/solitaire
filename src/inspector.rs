@@ -11,8 +11,12 @@ impl Plugin for InspectorPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (inspector_ui.run_if(input_toggle_active(true, KeyCode::Escape)),),
-        );
+            (
+                inspector_ui.run_if(input_toggle_active(true, KeyCode::Escape)),
+                gizmo_update,
+            ),
+        )
+        .insert_resource(GizmosDraw(false));
     }
 }
 
@@ -62,10 +66,17 @@ fn inspector_ui(world: &mut World, mut selected_entities: Local<SelectedEntities
 
 use crate::components::cards::CARD_SIZE;
 
+#[derive(Resource)]
+pub struct GizmosDraw(pub bool);
+
 pub fn gizmo_update(
     mut gizmos: Gizmos,
     mut giz: Query<(&mut Transform, &crate::components::cards::CardSlot)>,
+    on: Res<GizmosDraw>,
 ) {
+    if !on.0 {
+        return;
+    }
     for (t, _) in giz.iter_mut() {
         gizmos.rect(t.translation, t.rotation, CARD_SIZE, Color::RED);
     }

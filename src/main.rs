@@ -1,12 +1,9 @@
 use bevy::{prelude::KeyCode, prelude::*};
 use bevy_egui::EguiPlugin;
 use bevy_inspector_egui::DefaultInspectorConfigPlugin;
-//use bevy_window::PrimaryWindow;
 mod components;
 mod inspector;
 mod systems;
-//mod components/cards;
-//use crate::components::cards;
 use rand::prelude::IteratorRandom;
 use rand::Rng;
 
@@ -26,14 +23,7 @@ fn main() {
         .insert_resource(components::cards::Cards { cards: Vec::new() })
         .insert_resource(components::cards::CurrentCard(0))
         .add_systems(Startup, (setup, generate_board))
-        .add_systems(
-            Update,
-            (
-                inspector::gizmo_update,
-                move_cards_with_delay,
-                keyboard_input,
-            ),
-        )
+        .add_systems(Update, (move_cards_with_delay, keyboard_input))
         .run();
 }
 
