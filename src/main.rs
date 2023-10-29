@@ -30,67 +30,11 @@ fn main() {
             (
                 inspector::gizmo_update,
                 move_cards_with_delay,
-                //_test_system,
                 keyboard_input,
-                //_spin_spinnners,
-                //inspector_ui.run_if(input_toggle_active(true, KeyCode::Escape)),
             ),
         )
         .run();
 }
-/*
-fn inspector_ui(world: &mut World, mut selected_entities: Local<SelectedEntities>) {
-    let mut egui_context = world
-    .query_filtered::<&mut EguiContext, With<PrimaryWindow>>()
-    .single(world)
-    .clone();
-    egui::SidePanel::left("hierarchy")
-        .default_width(200.0)
-        .show(egui_context.get_mut(), |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                ui.heading("Hierarchy");
-
-                bevy_inspector_egui::bevy_inspector::hierarchy::hierarchy_ui(
-                    world,
-                    ui,
-                    &mut selected_entities,
-                );
-
-                ui.label("Press escape to toggle UI");
-                ui.allocate_space(ui.available_size());
-            });
-        });
-
-        egui::SidePanel::right("inspector")
-        .default_width(250.0)
-        .show(egui_context.get_mut(), |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                ui.heading("Inspector");
-
-                match selected_entities.as_slice() {
-                    &[entity] => {
-                        bevy_inspector_egui::bevy_inspector::ui_for_entity(world, entity, ui);
-                    }
-                    entities => {
-                        bevy_inspector_egui::bevy_inspector::ui_for_entities_shared_components(
-                            world, entities, ui,
-                        );
-                    }
-                }
-
-                ui.allocate_space(ui.available_size());
-            });
-        });
-    }
-    */
-/*
-#[derive(Component)]
-struct Spinner {
-    x: f32,
-    y: f32,
-    z: f32,
-//}
-*/
 
 #[derive(Reflect, Clone, Copy, Debug)]
 enum MoveState {
@@ -189,16 +133,6 @@ fn move_cards_with_delay(
         c.moving = MoveState::Moving;
     }
 }
-/*
-fn _spin_spinnners(time: Res<Time>, mut cards: Query<(&mut Transform, &Spinner, &Card)>) {
-    for (mut tx, s, _) in cards.iter_mut() {
-        tx.rotate_x(s.x * time.delta_seconds());
-        tx.rotate_y(s.y * time.delta_seconds());
-        tx.rotate_z(s.z * time.delta_seconds());
-    //}
-//}
-*/
-
 fn _test_system(
     time: Res<Time>,
     mut cards: Query<
@@ -342,13 +276,6 @@ fn setup(
                     ..default()
                 },
                 c,
-                /*
-                Spinner {
-                    x: rng.gen_range(-3.0..=3.0),
-                    y: rng.gen_range(-3.0..=3.0),
-                    z: rng.gen_range(-3.0..=3.0),
-                //},
-                */
                 MoveCardsWtihDelay {
                     target: None,
                     start_position: initial_position.truncate(),
