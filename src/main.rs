@@ -4,6 +4,7 @@ use bevy_inspector_egui::DefaultInspectorConfigPlugin;
 mod components;
 mod inspector;
 mod systems;
+use bevy_window::PrimaryWindow;
 use rand::prelude::IteratorRandom;
 use rand::Rng;
 
@@ -22,9 +23,49 @@ fn main() {
         .register_type::<CardSlotPositions>()
         .insert_resource(components::cards::Cards { cards: Vec::new() })
         .insert_resource(components::cards::CurrentCard(0))
+        .init_resource::<MousePosition>()
         .add_systems(Startup, (setup, generate_board))
-        .add_systems(Update, (move_cards_with_delay, keyboard_input))
+        .add_systems(
+            Update,
+            (
+                move_cards_with_delay,
+                keyboard_input,
+                mouse_position_system,
+                // This is probably not a good way to do this, will have to reasearch more about
+                // better ways to handel input later
+                click_check_system.run_if(bevy::input::common_conditions::input_just_pressed(
+                    MouseButton::Left,
+                )),
+            ),
+        )
         .run();
+}
+
+#[derive(Resource, Default)]
+struct MousePosition(Vec2);
+
+fn mouse_position_system(
+    mut pos: ResMut<MousePosition>,
+    window: Query<&Window, With<PrimaryWindow>>,
+    camera: Query<(&Camera, &GlobalTransform)>,
+) {
+    let (cam, cam_tx) = camera.single();
+    let win = window.single();
+    if let Some(world_pos) = win
+        .cursor_position()
+        .and_then(|c| cam.viewport_to_world(cam_tx, c))
+        .map(|ray| ray.origin.truncate())
+    {
+        pos.0 = world_pos;
+        //println!("pos is {}, {}", world_pos.x, world_pos.y);
+    }
+}
+
+#[derive(Component)]
+struct Clickable;
+
+fn click_check_system(pos: Res<MousePosition>) {
+    println!("Mouse clicked at {}, {}", pos.0.x, pos.0.y);
 }
 
 #[derive(Reflect, Clone, Copy, Debug)]
