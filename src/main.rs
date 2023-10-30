@@ -52,7 +52,7 @@ impl CardSlotPositions {
     }
 }
 
-const BOARD_POSITION_OFFSET: Vec2 = Vec2::new(-400.0, 310.0);
+//const BOARD_POSITION_OFFSET: Vec2 = Vec2::new(-400.0, 310.0);
 const PADDING: f32 = 7.0;
 
 fn generate_board(mut commands: Commands) {
@@ -243,6 +243,7 @@ fn keyboard_input(
     keys: Res<Input<KeyCode>>,
     current: Res<components::cards::CurrentCard>,
     mut cards: Query<(&mut Transform, &mut components::cards::Card)>,
+    gizmos_toggle: Res<inspector::GizmosDraw>,
 ) {
     let the_cards = &mut cards; //.iter();
     let it = &mut the_cards.iter_mut();
@@ -267,18 +268,8 @@ fn keyboard_input(
         println!("{:?}", temp2);
         temp2.translation = temp2.translation + temp2.local_x() * 25.0;
     }
-    if keys.just_pressed(KeyCode::Left) {
-        // Left Ctrl was released
-    }
-    if keys.pressed(KeyCode::W) {
-        // W is being held down
-    }
-    // we can check multiple at once with `.any_*`
-    if keys.any_pressed([KeyCode::M, KeyCode::N]) {
-        // Either the left or right shift are being held down
-    }
-    if keys.any_just_pressed([KeyCode::Delete, KeyCode::Back]) {
-        // Either delete or backspace was just pressed
+    if keys.just_pressed(KeyCode::D) {
+        commands.insert_resource(inspector::GizmosDraw(!gizmos_toggle.0));
     }
     commands.insert_resource(components::cards::CurrentCard(index));
 }
