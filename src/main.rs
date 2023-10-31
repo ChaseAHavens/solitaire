@@ -64,7 +64,25 @@ fn mouse_position_system(
 #[derive(Component)]
 struct Clickable;
 
-fn click_check_system(pos: Res<MousePosition>) {
+fn click_check_system(pos: Res<MousePosition>, clk: Query<&Transform, &Clickable>) {
+    let size = crate::components::cards::CARD_SIZE;
+    let mut distance = 0.0;
+    let mut selected_tx: Option<&Transform> = None;
+    for c in clk.iter() {
+        let card_rect = Rect::from_center_size(c.translation.truncate(), size);
+        if !card_rect.contains(pos.0) {
+            continue;
+        }
+        let this_card_distance = pos.0.distance(c.translation.truncate());
+        if this_card_distance < distance {
+            continue;
+        }
+        distance = this_card_distance;
+        selected_tx = Some(c);
+    }
+    if distance != 0.0 {
+        println!("Card selected:  {:?}", selected_tx);
+    }
     println!("Mouse clicked at {}, {}", pos.0.x, pos.0.y);
 }
 
@@ -397,6 +415,7 @@ fn setup(
                     ..default()
                 },
                 c,
+                Clickable,
                 MoveCardsWtihDelay {
                     target: None,
                     start_position: initial_position.truncate(),
