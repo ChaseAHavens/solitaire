@@ -22,6 +22,7 @@ fn main() {
         .register_type::<u128>()
         .register_type::<CardSlotPositions>()
         .insert_resource(components::cards::Cards { cards: Vec::new() })
+        .insert_resource(LastClickedEntity(None))
         .insert_resource(components::cards::CurrentCard(0))
         .init_resource::<MousePosition>()
         .add_systems(Startup, (setup, generate_board))
@@ -61,27 +62,35 @@ fn mouse_position_system(
     }
 }
 
+#[derive(Resource, Default)]
+struct LastClickedEntity(Option<Entity>);
+
 #[derive(Component)]
 struct Clickable;
 
-fn click_check_system(pos: Res<MousePosition>, clk: Query<&Transform, &Clickable>) {
+fn click_check_system(
+    pos: Res<MousePosition>,
+    mut selected_entity: ResMut<LastClickedEntity>,
+    clk: Query<(Entity, &Transform), &Clickable>,
+) {
     let size = crate::components::cards::CARD_SIZE;
     let mut distance = 0.0;
-    let mut selected_tx: Option<&Transform> = None;
+    let mut selected: Option<(Entity, &Transform)> = None;
     for c in clk.iter() {
-        let card_rect = Rect::from_center_size(c.translation.truncate(), size);
+        let card_rect = Rect::from_center_size(c.1.translation.truncate(), size);
         if !card_rect.contains(pos.0) {
             continue;
         }
-        let this_card_distance = pos.0.distance(c.translation.truncate());
+        let this_card_distance = pos.0.distance(c.1.translation.truncate());
         if this_card_distance < distance {
             continue;
         }
         distance = this_card_distance;
-        selected_tx = Some(c);
+        selected = Some(c);
     }
-    if distance != 0.0 {
-        println!("Card selected:  {:?}", selected_tx);
+    if let Some((x, _)) = selected {
+        println!("Card selected: {:?}", selected);
+        selected_entity.0 = Some(x);
     }
     println!("Mouse clicked at {}, {}", pos.0.x, pos.0.y);
 }
