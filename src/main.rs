@@ -69,9 +69,11 @@ struct LastClickedEntity(Option<Entity>);
 struct Clickable;
 
 fn click_check_system(
+    mut commands: Commands,
     pos: Res<MousePosition>,
     mut selected_entity: ResMut<LastClickedEntity>,
     clk: Query<(Entity, &Transform), &Clickable>,
+    a_slot: Query<(Entity, &components::cards::CardSlot)>,
 ) {
     let size = crate::components::cards::CARD_SIZE;
     let mut distance = 0.0;
@@ -88,9 +90,20 @@ fn click_check_system(
         distance = this_card_distance;
         selected = Some(c);
     }
-    if let Some((x, _)) = selected {
+    if let Some((x, tx)) = selected {
         println!("Card selected: {:?}", selected);
         selected_entity.0 = Some(x);
+        let current_card_pos = tx.translation.truncate();
+        let get_a_slot = a_slot.iter().next();
+        commands.entity(x).insert(MoveCardsWtihDelay {
+            target: Some(get_a_slot.expect("Fuckin fucked the slot").0),
+            start_position: current_card_pos,
+            moving: MoveState::StartMove,
+            time_at_start_of_move: 0,
+            time_before_next_move: 0,
+            time_to_finish_move: 0,
+            rotation_freqs: (0, 1, 0),
+        });
     }
     println!("Mouse clicked at {}, {}", pos.0.x, pos.0.y);
 }
@@ -239,56 +252,58 @@ fn move_cards_with_delay(
             }
         }
     }
-    fn moving_stuff(
-        tx: &mut Transform,
-        slots: Vec<(Entity, &Transform)>,
-        c: &mut MoveCardsWtihDelay,
-        t: u128,
-    ) {
-        let slot_position_of_current_card = slots
-            .iter()
-            .find(|x| {
-                x.0 == c
-                    .target
-                    .expect("Got a none while trying to unwrap in Moving_stuff")
-            })
-            .expect("Got a none trying to unwrap an (&entity, &transform) in moving_stuff")
-            .1
-            .translation;
-        let percent_of_move_done: f32 = (t - c.time_at_start_of_move) as f32
-            / (c.time_to_finish_move - c.time_at_start_of_move) as f32;
-        let location: Vec2 = c.start_position.lerp(
-            slot_position_of_current_card.truncate(),
-            percent_of_move_done,
-        );
-        tx.translation = location.extend(tx.translation.z);
-        let x = (c.rotation_freqs.0 as f32 * (percent_of_move_done * 360.0)) % 360.0;
-        let y = (c.rotation_freqs.1 as f32 * (percent_of_move_done * 360.0)) % 360.0;
-        let z = (c.rotation_freqs.2 as f32 * (percent_of_move_done * 360.0)) % 360.0;
-        tx.rotation = Quat::from_euler(
-            EulerRot::XYZ,
-            x.to_radians(),
-            y.to_radians(),
-            z.to_radians(),
-        );
-        if c.time_to_finish_move <= t {
-            c.moving = MoveState::EndMove;
-        }
+}
+
+fn moving_stuff(
+    tx: &mut Transform,
+    slots: Vec<(Entity, &Transform)>,
+    c: &mut MoveCardsWtihDelay,
+    t: u128,
+) {
+    let slot_position_of_current_card = slots
+        .iter()
+        .find(|x| {
+            x.0 == c
+                .target
+                .expect("Got a none while trying to unwrap in Moving_stuff")
+        })
+        .expect("Got a none trying to unwrap an (&entity, &transform) in moving_stuff")
+        .1
+        .translation;
+    let percent_of_move_done: f32 = (t - c.time_at_start_of_move) as f32
+        / (c.time_to_finish_move - c.time_at_start_of_move) as f32;
+    let location: Vec2 = c.start_position.lerp(
+        slot_position_of_current_card.truncate(),
+        percent_of_move_done,
+    );
+    tx.translation = location.extend(tx.translation.z);
+    let x = (c.rotation_freqs.0 as f32 * (percent_of_move_done * 360.0)) % 360.0;
+    let y = (c.rotation_freqs.1 as f32 * (percent_of_move_done * 360.0)) % 360.0;
+    let z = (c.rotation_freqs.2 as f32 * (percent_of_move_done * 360.0)) % 360.0;
+    tx.rotation = Quat::from_euler(
+        EulerRot::XYZ,
+        x.to_radians(),
+        y.to_radians(),
+        z.to_radians(),
+    );
+    if c.time_to_finish_move <= t {
+        c.moving = MoveState::EndMove;
     }
-    fn start_new_move(
-        tx: &mut Transform,
-        e: Option<Entity>,
-        c: &mut MoveCardsWtihDelay,
-        t: u128,
-        r: &mut rand::rngs::ThreadRng,
-    ) {
-        c.target = e;
-        c.time_at_start_of_move = t;
-        c.time_before_next_move = t + r.gen_range(1000..2000);
-        c.time_to_finish_move = t + r.gen_range(2000..3000);
-        c.start_position = tx.translation.truncate();
-        c.moving = MoveState::Moving;
-    }
+}
+
+fn start_new_move(
+    tx: &mut Transform,
+    e: Option<Entity>,
+    c: &mut MoveCardsWtihDelay,
+    t: u128,
+    r: &mut rand::rngs::ThreadRng,
+) {
+    c.target = e;
+    c.time_at_start_of_move = t;
+    c.time_before_next_move = t + r.gen_range(1000..2000);
+    c.time_to_finish_move = t + r.gen_range(2000..3000);
+    c.start_position = tx.translation.truncate();
+    c.moving = MoveState::Moving;
 }
 fn _test_system(
     time: Res<Time>,
@@ -341,13 +356,13 @@ fn keyboard_input(
     }
     commands.insert_resource(components::cards::CurrentCard(index));
 }
+
 fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut texture_atlases: ResMut<Assets<TextureAtlas>>,
 ) {
     commands.spawn(Camera2dBundle::default());
-
     let rng = &mut rand::thread_rng();
     /*
         for _ in 0..10 {
@@ -425,6 +440,7 @@ fn setup(
                 },
                 c,
                 Clickable,
+                /*
                 MoveCardsWtihDelay {
                     target: None,
                     start_position: initial_position.truncate(),
@@ -438,6 +454,7 @@ fn setup(
                         0, //rng.gen_range(0..=1),
                     ),
                 },
+                */
             ))
             .with_children(|parent| {
                 parent.spawn((
