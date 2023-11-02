@@ -201,7 +201,7 @@ enum MoveState {
     StartMove,
     Moving,
     EndMove,
-    Waiting,
+    RemoveComponent,
 }
 
 #[derive(Component, Reflect, Clone, Copy, Debug)]
@@ -216,13 +216,14 @@ pub struct MoveCardsWtihDelay {
 }
 
 fn move_cards_with_delay(
+    mut commands: Commands,
     time: Res<Time>,
-    mut move_card: Query<(&mut Transform, &mut MoveCardsWtihDelay)>,
+    mut move_card: Query<(Entity, &mut Transform, &mut MoveCardsWtihDelay)>,
     slots: Query<(Entity, &Transform, &components::cards::CardSlot), Without<MoveCardsWtihDelay>>,
 ) {
     let rng = &mut rand::thread_rng();
     let current_time = time.elapsed().as_millis();
-    for (mut txa, mut ca) in &mut move_card.iter_mut() {
+    for (ea, mut txa, mut ca) in &mut move_card.iter_mut() {
         let tx = txa.as_mut();
         let c = ca.as_mut();
         let stx: Vec<(Entity, &Transform)> = slots.iter().map(|x| (x.0, x.1)).collect();
@@ -243,12 +244,10 @@ fn move_cards_with_delay(
             }
             MoveState::EndMove => {
                 c.time_before_next_move = current_time + rng.gen_range(1000..2000);
-                c.moving = MoveState::Waiting;
+                c.moving = MoveState::RemoveComponent;
             }
-            MoveState::Waiting => {
-                if c.time_before_next_move >= current_time {
-                    c.moving = MoveState::StartMove;
-                }
+            MoveState::RemoveComponent => {
+                commands.entity(ea).remove::<MoveCardsWtihDelay>();
             }
         }
     }
