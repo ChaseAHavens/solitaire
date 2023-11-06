@@ -69,9 +69,12 @@ use crate::components::cards::CARD_SIZE;
 #[derive(Resource)]
 pub struct GizmosDraw(pub bool);
 
+#[derive(Component)]
+pub struct DebugRect;
+
 pub fn gizmo_update(
     mut gizmos: Gizmos,
-    mut giz: Query<(&mut Transform, &crate::components::cards::CardSlot)>,
+    mut giz: Query<(&mut Transform, &DebugRect)>,
     on: Res<GizmosDraw>,
 ) {
     if !on.0 {

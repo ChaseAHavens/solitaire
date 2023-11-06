@@ -4,11 +4,11 @@ pub struct CardsPlugin;
 
 impl Plugin for CardsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (card_face_up, card_back_up));
+        app.add_systems(Update, (card_visual_keep_face_up, card_visual_keep_back_up));
     }
 }
 
-pub fn card_face_up(
+pub fn card_visual_keep_face_up(
     mut cards: Query<(
         &mut Visibility,
         &mut GlobalTransform,
@@ -24,7 +24,7 @@ pub fn card_face_up(
         };
     }
 }
-pub fn card_back_up(
+pub fn card_visual_keep_back_up(
     mut cards: Query<(
         &mut Visibility,
         &mut GlobalTransform,

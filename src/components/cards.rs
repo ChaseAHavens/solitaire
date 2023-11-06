@@ -14,11 +14,15 @@ pub enum CardColor {
 }
 
 #[derive(Component, Reflect, Clone, Copy, Debug)]
-pub struct Card {
+pub struct CardVisual {
     pub index: usize,
     pub number: usize,
     pub suit: CardSuit,
     pub color: CardColor,
+}
+#[derive(Component)]
+pub struct CardDraggable {
+    pub card: Entity,
 }
 
 #[derive(Component, Reflect, Clone, Copy, Debug)]
@@ -31,7 +35,7 @@ pub struct CardBack;
 
 #[derive(Resource, Reflect, Default)]
 pub struct Cards {
-    pub cards: Vec<Card>,
+    pub cards: Vec<CardVisual>,
 }
 
 #[derive(Resource)]

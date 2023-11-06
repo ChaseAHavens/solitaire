@@ -17,7 +17,7 @@ fn main() {
         .add_plugins(crate::systems::cards::CardsPlugin)
         .register_type::<components::cards::CardSuit>()
         .register_type::<components::cards::CardColor>()
-        .register_type::<components::cards::Card>()
+        .register_type::<components::cards::CardVisual>()
         .register_type::<MoveCardsWtihDelay>()
         .register_type::<u128>()
         .register_type::<CardSlotPositions>()
@@ -29,7 +29,7 @@ fn main() {
         .add_systems(
             Update,
             (
-                move_cards_with_delay,
+                move_cards,
                 keyboard_input,
                 mouse_position_system,
                 // This is probably not a good way to do this, will have to reasearch more about
@@ -215,7 +215,7 @@ pub struct MoveCardsWtihDelay {
     rotation_freqs: (i8, i8, i8),
 }
 
-fn move_cards_with_delay(
+fn move_cards(
     mut commands: Commands,
     time: Res<Time>,
     mut move_card: Query<(Entity, &mut Transform, &mut MoveCardsWtihDelay)>,
@@ -307,10 +307,13 @@ fn start_new_move(
 fn _test_system(
     time: Res<Time>,
     mut cards: Query<
-        (&mut Transform, &components::cards::Card),
+        (&mut Transform, &components::cards::CardVisual),
         Without<components::cards::CardSlot>,
     >,
-    slots: Query<(&Transform, &components::cards::CardSlot), Without<components::cards::Card>>,
+    slots: Query<
+        (&Transform, &components::cards::CardSlot),
+        Without<components::cards::CardVisual>,
+    >,
 ) {
     let first_slot = slots.iter().next().expect("fuck").0;
     for (mut t, _) in cards.iter_mut() {
@@ -324,7 +327,7 @@ fn keyboard_input(
     mut commands: Commands,
     keys: Res<Input<KeyCode>>,
     current: Res<components::cards::CurrentCard>,
-    mut cards: Query<(&mut Transform, &mut components::cards::Card)>,
+    mut cards: Query<(&mut Transform, &mut components::cards::CardVisual)>,
     gizmos_toggle: Res<inspector::GizmosDraw>,
 ) {
     let the_cards = &mut cards; //.iter();
@@ -417,7 +420,7 @@ fn setup(
                 println!("got out of range when generating cards")
             }
         }
-        let c: components::cards::Card = components::cards::Card {
+        let c: components::cards::CardVisual = components::cards::CardVisual {
             index: i + 1,
             number: (i % 13) + 1,
             suit,
@@ -428,7 +431,8 @@ fn setup(
             rng.gen_range(-300.0..=300.0),
             rng.gen_range(-300.0..=300.0),
         );
-        commands
+
+        let ent = commands
             .spawn((
                 SpatialBundle {
                     transform: Transform {
@@ -438,7 +442,7 @@ fn setup(
                     ..default()
                 },
                 c,
-                Clickable,
+                //Clickable,
                 /*
                 MoveCardsWtihDelay {
                     target: None,
@@ -481,6 +485,34 @@ fn setup(
                     },
                     components::cards::CardBack,
                 ));
-            });
+            })
+            .id();
+        commands.spawn((
+            SpatialBundle {
+                transform: Transform {
+                    translation: initial_position,
+                    ..default()
+                },
+                ..default()
+            },
+            crate::inspector::DebugRect,
+            crate::components::cards::CardDraggable { card: ent },
+            Clickable,
+            /*
+            MoveCardsWtihDelay {
+                target: None,
+                start_position: initial_position.truncate(),
+                moving: MoveState::StartMove,
+                time_at_start_of_move: 0,
+                time_before_next_move: 0,
+                time_to_finish_move: 0,
+                rotation_freqs: (
+                    rng.gen_range(-1..=1),
+                    rng.gen_range(-1..=1),
+                    0, //rng.gen_range(0..=1),
+                ),
+            },
+            */
+        ));
     }
 }
