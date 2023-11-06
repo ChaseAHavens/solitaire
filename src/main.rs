@@ -22,6 +22,10 @@ fn main() {
         .register_type::<CardSlotPositions>()
         .insert_resource(components::cards::Cards { cards: Vec::new() })
         .insert_resource(LastClickedEntity(None))
+        .insert_resource(Dragging {
+            draggable: None,
+            offset: Vec2::ZERO,
+        })
         .insert_resource(components::cards::CurrentCard(0))
         .init_resource::<MousePosition>()
         .add_systems(Startup, (setup, generate_board))
@@ -63,6 +67,29 @@ fn mouse_position_system(
 
 #[derive(Resource, Default)]
 struct LastClickedEntity(Option<Entity>);
+
+#[derive(Resource, Default)]
+struct Dragging {
+    draggable: Option<Entity>,
+    offset: Vec2,
+}
+
+fn drag(
+    mut commands: Commands,
+    pos: Res<MousePosition>,
+    last_clicked: Res<Dragging>,
+    mut draggables: Query<(Entity, &mut Transform, &components::cards::CardDraggable)>,
+) {
+    if last_clicked.draggable.is_none() {
+        return;
+    }
+    let (drag_ent, drag_tx, drag_able) = draggables
+        .iter()
+        .find(|x| Some(x.0) == last_clicked.draggable)
+        .expect("Draggable saved in Dragging doesnt match any CardDraggables queried.");
+    let f = pos.0 + last_clicked.offset;
+    drag_tx.translation = Vec3::new(f.x, f.y, 0.0);
+}
 
 #[derive(Component)]
 struct Clickable;
@@ -326,6 +353,18 @@ fn _test_system(
         let diff = t.translation - first_slot.translation;
         let dir = diff.normalize();
         t.translation -= dir * 50.0 * time.delta_seconds();
+    }
+}
+
+//this needs to be updated and all the clicking code moved into this so I can get rid of that
+//weird run_if thing in the setup.
+fn mouse_input(
+    mouse_clicks: Res<Input<MouseButton>>,
+    mut drag: Res<Dragging>,
+    pos: Res<MousePosition>,
+) {
+    if mouse_clicks.just_released(MouseButton::Left) {
+        drag.draggable = None;
     }
 }
 
