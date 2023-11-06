@@ -20,7 +20,7 @@ pub struct CardVisual {
     pub suit: CardSuit,
     pub color: CardColor,
 }
-#[derive(Component)]
+#[derive(Component, Reflect, Clone, Copy, Debug)]
 pub struct CardDraggable {
     pub card: Entity,
 }

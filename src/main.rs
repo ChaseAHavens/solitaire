@@ -5,7 +5,6 @@ mod components;
 mod inspector;
 mod systems;
 use bevy_window::PrimaryWindow;
-use rand::prelude::IteratorRandom;
 use rand::Rng;
 
 fn main() {
@@ -18,7 +17,7 @@ fn main() {
         .register_type::<components::cards::CardSuit>()
         .register_type::<components::cards::CardColor>()
         .register_type::<components::cards::CardVisual>()
-        .register_type::<MoveCardsWtihDelay>()
+        .register_type::<MoveThisCard>()
         .register_type::<u128>()
         .register_type::<CardSlotPositions>()
         .insert_resource(components::cards::Cards { cards: Vec::new() })
@@ -68,16 +67,20 @@ struct LastClickedEntity(Option<Entity>);
 #[derive(Component)]
 struct Clickable;
 
+//The start of this is all fixed now so the visual cards move towards the
+//draggable cards, I still have to fix this so it stops crashing and
+//write it so you can click and drag the draggables and then the visual
+//cards just move at the end of the click and drag.
+
 fn click_check_system(
     mut commands: Commands,
     pos: Res<MousePosition>,
     mut selected_entity: ResMut<LastClickedEntity>,
-    clk: Query<(Entity, &Transform), &Clickable>,
-    a_slot: Query<(Entity, &components::cards::CardSlot)>,
+    clk: Query<(Entity, &Transform, &components::cards::CardDraggable)>,
 ) {
     let size = crate::components::cards::CARD_SIZE;
     let mut distance = 0.0;
-    let mut selected: Option<(Entity, &Transform)> = None;
+    let mut selected: Option<(Entity, &Transform, &components::cards::CardDraggable)> = None;
     for c in clk.iter() {
         let card_rect = Rect::from_center_size(c.1.translation.truncate(), size);
         if !card_rect.contains(pos.0) {
@@ -90,13 +93,12 @@ fn click_check_system(
         distance = this_card_distance;
         selected = Some(c);
     }
-    if let Some((x, tx)) = selected {
+    if let Some((x, tx, cd)) = selected {
         println!("Card selected: {:?}", selected);
         selected_entity.0 = Some(x);
         let current_card_pos = tx.translation.truncate();
-        let get_a_slot = a_slot.iter().next();
-        commands.entity(x).insert(MoveCardsWtihDelay {
-            target: Some(get_a_slot.expect("Fuckin fucked the slot").0),
+        commands.entity(x).insert(MoveThisCard {
+            target: Some(cd.card),
             start_position: current_card_pos,
             moving: MoveState::StartMove,
             time_at_start_of_move: 0,
@@ -205,7 +207,7 @@ enum MoveState {
 }
 
 #[derive(Component, Reflect, Clone, Copy, Debug)]
-pub struct MoveCardsWtihDelay {
+pub struct MoveThisCard {
     target: Option<Entity>,
     start_position: Vec2,
     moving: MoveState,
@@ -218,36 +220,40 @@ pub struct MoveCardsWtihDelay {
 fn move_cards(
     mut commands: Commands,
     time: Res<Time>,
-    mut move_card: Query<(Entity, &mut Transform, &mut MoveCardsWtihDelay)>,
-    slots: Query<(Entity, &Transform, &components::cards::CardSlot), Without<MoveCardsWtihDelay>>,
+    mut move_card: Query<(Entity, &mut Transform, &mut MoveThisCard)>,
+    draggables: Query<
+        (Entity, &Transform, &components::cards::CardDraggable),
+        Without<MoveThisCard>,
+    >,
 ) {
     let rng = &mut rand::thread_rng();
     let current_time = time.elapsed().as_millis();
     for (ea, mut txa, mut ca) in &mut move_card.iter_mut() {
         let tx = txa.as_mut();
         let c = ca.as_mut();
-        let stx: Vec<(Entity, &Transform)> = slots.iter().map(|x| (x.0, x.1)).collect();
+        let all_draggables: Vec<(Entity, &Transform)> =
+            draggables.iter().map(|x| (x.0, x.1)).collect();
 
-        let random_slot: Option<Entity> = Some(
-            slots
+        let slot_from_movethiscard: Option<Entity> = Some(
+            draggables
                 .iter()
-                .choose(rng)
-                .expect("Got a none while choosing a random slot.")
+                .find(|x| x.0 == c.target.expect("fuckin in slot_from"))
+                .expect("Got a none while trying to find the card dragggable.")
                 .0,
         );
         match c.moving {
             MoveState::StartMove => {
-                start_new_move(tx, random_slot, c, current_time, rng);
+                start_new_move(tx, slot_from_movethiscard, c, current_time, rng);
             }
             MoveState::Moving => {
-                moving_stuff(tx, stx, c, current_time);
+                moving_stuff(tx, all_draggables, c, current_time);
             }
             MoveState::EndMove => {
                 c.time_before_next_move = current_time + rng.gen_range(1000..2000);
                 c.moving = MoveState::RemoveComponent;
             }
             MoveState::RemoveComponent => {
-                commands.entity(ea).remove::<MoveCardsWtihDelay>();
+                commands.entity(ea).remove::<MoveThisCard>();
             }
         }
     }
@@ -255,11 +261,11 @@ fn move_cards(
 
 fn moving_stuff(
     tx: &mut Transform,
-    slots: Vec<(Entity, &Transform)>,
-    c: &mut MoveCardsWtihDelay,
+    targets: Vec<(Entity, &Transform)>,
+    c: &mut MoveThisCard,
     t: u128,
 ) {
-    let slot_position_of_current_card = slots
+    let current_move_target = targets
         .iter()
         .find(|x| {
             x.0 == c
@@ -271,10 +277,9 @@ fn moving_stuff(
         .translation;
     let percent_of_move_done: f32 = (t - c.time_at_start_of_move) as f32
         / (c.time_to_finish_move - c.time_at_start_of_move) as f32;
-    let location: Vec2 = c.start_position.lerp(
-        slot_position_of_current_card.truncate(),
-        percent_of_move_done,
-    );
+    let location: Vec2 = c
+        .start_position
+        .lerp(current_move_target.truncate(), percent_of_move_done);
     tx.translation = location.extend(tx.translation.z);
     let x = (c.rotation_freqs.0 as f32 * (percent_of_move_done * 360.0)) % 360.0;
     let y = (c.rotation_freqs.1 as f32 * (percent_of_move_done * 360.0)) % 360.0;
@@ -293,7 +298,7 @@ fn moving_stuff(
 fn start_new_move(
     tx: &mut Transform,
     e: Option<Entity>,
-    c: &mut MoveCardsWtihDelay,
+    c: &mut MoveThisCard,
     t: u128,
     r: &mut rand::rngs::ThreadRng,
 ) {
@@ -304,6 +309,7 @@ fn start_new_move(
     c.start_position = tx.translation.truncate();
     c.moving = MoveState::Moving;
 }
+
 fn _test_system(
     time: Res<Time>,
     mut cards: Query<
@@ -436,7 +442,7 @@ fn setup(
             .spawn((
                 SpatialBundle {
                     transform: Transform {
-                        translation: initial_position,
+                        translation: Vec3::ZERO, //initial_position,
                         ..default()
                     },
                     ..default()
@@ -444,7 +450,7 @@ fn setup(
                 c,
                 //Clickable,
                 /*
-                MoveCardsWtihDelay {
+                MoveThisCard {
                     target: None,
                     start_position: initial_position.truncate(),
                     moving: MoveState::StartMove,
@@ -487,32 +493,47 @@ fn setup(
                 ));
             })
             .id();
-        commands.spawn((
-            SpatialBundle {
-                transform: Transform {
-                    translation: initial_position,
+        let card_drag = commands
+            .spawn((
+                SpatialBundle {
+                    transform: Transform {
+                        translation: initial_position,
+                        ..default()
+                    },
                     ..default()
                 },
-                ..default()
-            },
-            crate::inspector::DebugRect,
-            crate::components::cards::CardDraggable { card: ent },
-            Clickable,
-            /*
-            MoveCardsWtihDelay {
-                target: None,
-                start_position: initial_position.truncate(),
-                moving: MoveState::StartMove,
-                time_at_start_of_move: 0,
-                time_before_next_move: 0,
-                time_to_finish_move: 0,
-                rotation_freqs: (
-                    rng.gen_range(-1..=1),
-                    rng.gen_range(-1..=1),
-                    0, //rng.gen_range(0..=1),
-                ),
-            },
-            */
-        ));
+                crate::inspector::DebugRect,
+                crate::components::cards::CardDraggable { card: ent },
+                Clickable,
+                /*
+                MoveThisCard {
+                    target: None,
+                    start_position: initial_position.truncate(),
+                    moving: MoveState::StartMove,
+                    time_at_start_of_move: 0,
+                    time_before_next_move: 0,
+                    time_to_finish_move: 0,
+                    rotation_freqs: (
+                        rng.gen_range(-1..=1),
+                        rng.gen_range(-1..=1),
+                        0, //rng.gen_range(0..=1),
+                    ),
+                },
+                */
+            ))
+            .id();
+        commands.entity(ent).insert(MoveThisCard {
+            target: Some(card_drag),
+            start_position: initial_position.truncate(),
+            moving: MoveState::StartMove,
+            time_at_start_of_move: 0,
+            time_before_next_move: 0,
+            time_to_finish_move: 0,
+            rotation_freqs: (
+                rng.gen_range(-1..=1),
+                rng.gen_range(-1..=1),
+                0, //rng.gen_range(0..=1),
+            ),
+        });
     }
 }
