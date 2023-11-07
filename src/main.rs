@@ -25,6 +25,9 @@ fn main() {
         .insert_resource(Dragging {
             draggable: None,
             offset: Vec2::ZERO,
+            card_start_position: Vec2::ZERO,
+            card_draggable: components::cards::CardDraggable { card: None },
+            card_id: None,
         })
         .insert_resource(components::cards::CurrentCard(0))
         .init_resource::<MousePosition>()
@@ -72,6 +75,9 @@ struct LastClickedEntity(Option<Entity>);
 struct Dragging {
     draggable: Option<Entity>,
     offset: Vec2,
+    card_start_position: Vec2,
+    card_id: Option<Entity>,
+    card_draggable: crate::components::cards::CardDraggable,
 }
 
 fn drag(
@@ -87,7 +93,7 @@ fn drag(
         .iter_mut()
         .find(|x| Some(x.0) == last_clicked.draggable)
         .expect("Draggable saved in Dragging doesnt match any CardDraggables queried.");
-    let f = pos.0 + last_clicked.offset;
+    let f = pos.0 - last_clicked.offset;
     drag_tx.translation = Vec3::new(f.x, f.y, 0.0);
 }
 
@@ -201,7 +207,6 @@ pub struct MoveThisCard {
     start_position: Vec2,
     moving: MoveState,
     time_at_start_of_move: u128,
-    time_before_next_move: u128,
     time_to_finish_move: u128,
     rotation_freqs: (i8, i8, i8),
 }
@@ -248,10 +253,10 @@ fn move_cards(
                 moving_stuff(tx, all_draggables, c, current_time);
             }
             MoveState::EndMove => {
-                c.time_before_next_move = current_time + rng.gen_range(1000..2000);
                 c.moving = MoveState::RemoveComponent;
             }
             MoveState::RemoveComponent => {
+                println!("Removing MoveThisCard component");
                 commands.entity(ea).remove::<MoveThisCard>();
             }
         }
@@ -290,6 +295,7 @@ fn moving_stuff(
         z.to_radians(),
     );
     if c.time_to_finish_move <= t {
+        println!("Setting move state to end");
         c.moving = MoveState::EndMove;
     }
 }
@@ -303,7 +309,6 @@ fn start_new_move(
 ) {
     c.target = e;
     c.time_at_start_of_move = t;
-    c.time_before_next_move = t + r.gen_range(1000..2000);
     c.time_to_finish_move = t + r.gen_range(2000..3000);
     c.start_position = tx.translation.truncate();
     c.moving = MoveState::Moving;
@@ -328,8 +333,6 @@ fn _test_system(
     }
 }
 
-//this needs to be updated and all the clicking code moved into this so I can get rid of that
-//weird run_if thing in the setup.
 fn mouse_input(
     mut commands: Commands,
     mouse_clicks: Res<Input<MouseButton>>,
@@ -338,13 +341,34 @@ fn mouse_input(
     draggables: Query<(Entity, &Transform, &components::cards::CardDraggable)>,
 ) {
     if mouse_clicks.just_released(MouseButton::Left) {
-        drag.draggable = None;
-        /*
-        commands.insert_resource(Dragging {
-            draggable: None,
-            offset: Vec2::ZERO,
+        if drag.card_id.is_none() {
+            return;
+        }
+        let the_card_id = drag
+            .card_id
+            .expect("None card_id when trying to build MoveThisCard");
+        let the_card_draggable = drag
+            .card_draggable
+            .card
+            .expect("None from card draggable when trying to build MoveThisCard");
+        commands.entity(the_card_id).insert(MoveThisCard {
+            target: Some(the_card_draggable),
+            start_position: drag.card_start_position,
+            /*
+            draggables
+                .iter()
+                .find(|x| x.0 == the_card_id)
+                .expect("failed to find entity id to extract start position")
+                .1
+                .translation
+                .truncate(),
+            */
+            moving: MoveState::StartMove,
+            time_at_start_of_move: 0,
+            time_to_finish_move: 0,
+            rotation_freqs: (0, 1, 0),
         });
-        */
+        drag.draggable = None;
     }
     if mouse_clicks.just_pressed(MouseButton::Left) {
         let size = crate::components::cards::CARD_SIZE;
@@ -366,58 +390,15 @@ fn mouse_input(
             println!("Card selected: {:?}", selected);
             drag.draggable = Some(x);
             let current_card_pos = tx.translation.truncate();
-            commands.entity(x).insert(MoveThisCard {
-                target: Some(cd.card),
-                start_position: current_card_pos,
-                moving: MoveState::StartMove,
-                time_at_start_of_move: 0,
-                time_before_next_move: 0,
-                time_to_finish_move: 0,
-                rotation_freqs: (0, 1, 0),
-            });
+            drag.offset = pos.0 - current_card_pos;
+            drag.card_start_position = current_card_pos;
+            drag.card_id = Some(x);
+            drag.card_draggable = *cd;
         }
         println!("Mouse clicked at {}, {}", pos.0.x, pos.0.y);
     }
 }
-/*
-fn click_check_system(
-    mut commands: Commands,
-    pos: Res<MousePosition>,
-    mut selected_entity: ResMut<LastClickedEntity>,
-    clk: Query<(Entity, &Transform, &components::cards::CardDraggable)>,
-) {
-    let size = crate::components::cards::CARD_SIZE;
-    let mut distance = 0.0;
-    let mut selected: Option<(Entity, &Transform, &components::cards::CardDraggable)> = None;
-    for c in clk.iter() {
-        let card_rect = Rect::from_center_size(c.1.translation.truncate(), size);
-        if !card_rect.contains(pos.0) {
-            continue;
-        }
-        let this_card_distance = pos.0.distance(c.1.translation.truncate());
-        if this_card_distance < distance {
-            continue;
-        }
-        distance = this_card_distance;
-        selected = Some(c);
-    }
-    if let Some((x, tx, cd)) = selected {
-        println!("Card selected: {:?}", selected);
-        selected_entity.0 = Some(x);
-        let current_card_pos = tx.translation.truncate();
-        commands.entity(x).insert(MoveThisCard {
-            target: Some(cd.card),
-            start_position: current_card_pos,
-            moving: MoveState::StartMove,
-            time_at_start_of_move: 0,
-            time_before_next_move: 0,
-            time_to_finish_move: 0,
-            rotation_freqs: (0, 1, 0),
-        });
-    }
-    println!("Mouse clicked at {}, {}", pos.0.x, pos.0.y);
-}
-*/
+
 fn keyboard_input(
     mut commands: Commands,
     keys: Res<Input<KeyCode>>,
@@ -461,24 +442,6 @@ fn setup(
 ) {
     commands.spawn(Camera2dBundle::default());
     let rng = &mut rand::thread_rng();
-    /*
-        for _ in 0..10 {
-            commands.spawn((
-                SpatialBundle {
-                    transform: Transform {
-                        translation: Vec3::new(
-                            rng.gen_range(-300.0..=300.0),
-                            rng.gen_range(-300.0..=300.0),
-                            0.0,
-                        ),
-                        ..default()
-                    },
-                    ..default()
-                },
-                components::cards::CardSlot,
-            ));
-        }
-    */
     for i in 0..52 {
         let texture_handle = asset_server.load("cards.png");
         let texture_atlas = TextureAtlas::from_grid(
@@ -537,22 +500,6 @@ fn setup(
                     ..default()
                 },
                 c,
-                //Clickable,
-                /*
-                MoveThisCard {
-                    target: None,
-                    start_position: initial_position.truncate(),
-                    moving: MoveState::StartMove,
-                    time_at_start_of_move: 0,
-                    time_before_next_move: 0,
-                    time_to_finish_move: 0,
-                    rotation_freqs: (
-                        rng.gen_range(-1..=1),
-                        rng.gen_range(-1..=1),
-                        0, //rng.gen_range(0..=1),
-                    ),
-                },
-                */
             ))
             .with_children(|parent| {
                 parent.spawn((
@@ -592,23 +539,8 @@ fn setup(
                     ..default()
                 },
                 crate::inspector::DebugRect,
-                crate::components::cards::CardDraggable { card: ent },
+                crate::components::cards::CardDraggable { card: Some(ent) },
                 Clickable,
-                /*
-                MoveThisCard {
-                    target: None,
-                    start_position: initial_position.truncate(),
-                    moving: MoveState::StartMove,
-                    time_at_start_of_move: 0,
-                    time_before_next_move: 0,
-                    time_to_finish_move: 0,
-                    rotation_freqs: (
-                        rng.gen_range(-1..=1),
-                        rng.gen_range(-1..=1),
-                        0, //rng.gen_range(0..=1),
-                    ),
-                },
-                */
             ))
             .id();
         commands.entity(ent).insert(MoveThisCard {
@@ -616,7 +548,6 @@ fn setup(
             start_position: initial_position.truncate(),
             moving: MoveState::StartMove,
             time_at_start_of_move: 0,
-            time_before_next_move: 0,
             time_to_finish_move: 0,
             rotation_freqs: (
                 rng.gen_range(-1..=1),
