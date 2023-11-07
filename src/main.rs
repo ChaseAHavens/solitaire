@@ -220,7 +220,6 @@ fn move_cards(
         Without<MoveThisCard>,
     >,
 ) {
-    let rng = &mut rand::thread_rng();
     let current_time = time.elapsed().as_millis();
     for (ea, mut txa, mut ca) in &mut move_card.iter_mut() {
         let tx = txa.as_mut();
@@ -246,7 +245,6 @@ fn move_cards(
                     ),
                     c,
                     current_time,
-                    rng,
                 );
             }
             MoveState::Moving => {
@@ -300,16 +298,12 @@ fn moving_stuff(
     }
 }
 
-fn start_new_move(
-    tx: &mut Transform,
-    e: Option<Entity>,
-    c: &mut MoveThisCard,
-    t: u128,
-    r: &mut rand::rngs::ThreadRng,
-) {
+fn start_new_move(tx: &mut Transform, e: Option<Entity>, c: &mut MoveThisCard, t: u128) {
+    println!("current time is : {}", t);
+    println!("time to finish is : {}", c.time_to_finish_move);
     c.target = e;
-    c.time_at_start_of_move = t;
-    c.time_to_finish_move = t + r.gen_range(2000..3000);
+    //c.time_at_start_of_move = t;
+    //c.time_to_finish_move = t + r.gen_range(2000..3000);
     c.start_position = tx.translation.truncate();
     c.moving = MoveState::Moving;
 }
@@ -338,12 +332,14 @@ fn mouse_input(
     mouse_clicks: Res<Input<MouseButton>>,
     mut drag: ResMut<Dragging>,
     pos: Res<MousePosition>,
+    time: Res<Time>,
     draggables: Query<(Entity, &Transform, &components::cards::CardDraggable)>,
 ) {
     if mouse_clicks.just_released(MouseButton::Left) {
         if drag.card_id.is_none() {
             return;
         }
+        //gotta rename this cause its the draggable, that whole struct needs to be cleaned up
         let the_card_id = drag
             .card_id
             .expect("None card_id when trying to build MoveThisCard");
@@ -351,8 +347,8 @@ fn mouse_input(
             .card_draggable
             .card
             .expect("None from card draggable when trying to build MoveThisCard");
-        commands.entity(the_card_id).insert(MoveThisCard {
-            target: Some(the_card_draggable),
+        commands.entity(the_card_draggable).insert(MoveThisCard {
+            target: Some(the_card_id),
             start_position: drag.card_start_position,
             /*
             draggables
@@ -364,14 +360,17 @@ fn mouse_input(
                 .truncate(),
             */
             moving: MoveState::StartMove,
-            time_at_start_of_move: 0,
-            time_to_finish_move: 0,
+            time_at_start_of_move: time.elapsed().as_millis(),
+            time_to_finish_move: time.elapsed().as_millis() + 300,
             rotation_freqs: (0, 1, 0),
         });
         drag.draggable = None;
     }
     if mouse_clicks.just_pressed(MouseButton::Left) {
         let size = crate::components::cards::CARD_SIZE;
+        //I can tell I'm messing up with the distance mesaure, its not always grabbing the center
+        //of the cards, this might be the upper left corner, but this needs to all be replaced
+        //anyway and just grab cards by the highest z card that you click on.
         let mut distance = 0.0;
         let mut selected: Option<(Entity, &Transform, &components::cards::CardDraggable)> = None;
         for d in draggables.iter() {
@@ -437,6 +436,7 @@ fn keyboard_input(
 
 fn setup(
     mut commands: Commands,
+    time: Res<Time>,
     asset_server: Res<AssetServer>,
     mut texture_atlases: ResMut<Assets<TextureAtlas>>,
 ) {
@@ -547,8 +547,8 @@ fn setup(
             target: Some(card_drag),
             start_position: initial_position.truncate(),
             moving: MoveState::StartMove,
-            time_at_start_of_move: 0,
-            time_to_finish_move: 0,
+            time_at_start_of_move: time.elapsed().as_millis(),
+            time_to_finish_move: time.elapsed().as_millis() + 2000,
             rotation_freqs: (
                 rng.gen_range(-1..=1),
                 rng.gen_range(-1..=1),
