@@ -34,12 +34,12 @@ fn main() {
             (
                 move_cards,
                 keyboard_input,
+                mouse_input,
                 mouse_position_system,
+                drag,
                 // This is probably not a good way to do this, will have to reasearch more about
                 // better ways to handel input later
-                click_check_system.run_if(bevy::input::common_conditions::input_just_pressed(
-                    MouseButton::Left,
-                )),
+                //click_check_system.run_if(bevy::input::common_conditions::input_just_pressed(MouseButton::Left, )),
             ),
         )
         .run();
@@ -75,7 +75,7 @@ struct Dragging {
 }
 
 fn drag(
-    mut commands: Commands,
+    //mut commands: Commands,
     pos: Res<MousePosition>,
     last_clicked: Res<Dragging>,
     mut draggables: Query<(Entity, &mut Transform, &components::cards::CardDraggable)>,
@@ -83,8 +83,8 @@ fn drag(
     if last_clicked.draggable.is_none() {
         return;
     }
-    let (drag_ent, drag_tx, drag_able) = draggables
-        .iter()
+    let (_drag_ent, mut drag_tx, _drag_able) = draggables
+        .iter_mut()
         .find(|x| Some(x.0) == last_clicked.draggable)
         .expect("Draggable saved in Dragging doesnt match any CardDraggables queried.");
     let f = pos.0 + last_clicked.offset;
@@ -98,44 +98,6 @@ struct Clickable;
 //draggable cards, I still have to fix this so it stops crashing and
 //write it so you can click and drag the draggables and then the visual
 //cards just move at the end of the click and drag.
-
-fn click_check_system(
-    mut commands: Commands,
-    pos: Res<MousePosition>,
-    mut selected_entity: ResMut<LastClickedEntity>,
-    clk: Query<(Entity, &Transform, &components::cards::CardDraggable)>,
-) {
-    let size = crate::components::cards::CARD_SIZE;
-    let mut distance = 0.0;
-    let mut selected: Option<(Entity, &Transform, &components::cards::CardDraggable)> = None;
-    for c in clk.iter() {
-        let card_rect = Rect::from_center_size(c.1.translation.truncate(), size);
-        if !card_rect.contains(pos.0) {
-            continue;
-        }
-        let this_card_distance = pos.0.distance(c.1.translation.truncate());
-        if this_card_distance < distance {
-            continue;
-        }
-        distance = this_card_distance;
-        selected = Some(c);
-    }
-    if let Some((x, tx, cd)) = selected {
-        println!("Card selected: {:?}", selected);
-        selected_entity.0 = Some(x);
-        let current_card_pos = tx.translation.truncate();
-        commands.entity(x).insert(MoveThisCard {
-            target: Some(cd.card),
-            start_position: current_card_pos,
-            moving: MoveState::StartMove,
-            time_at_start_of_move: 0,
-            time_before_next_move: 0,
-            time_to_finish_move: 0,
-            rotation_freqs: (0, 1, 0),
-        });
-    }
-    println!("Mouse clicked at {}, {}", pos.0.x, pos.0.y);
-}
 
 #[derive(Reflect, Clone, Copy, Debug)]
 struct Slot {
@@ -261,16 +223,26 @@ fn move_cards(
         let all_draggables: Vec<(Entity, &Transform)> =
             draggables.iter().map(|x| (x.0, x.1)).collect();
 
-        let slot_from_movethiscard: Option<Entity> = Some(
-            draggables
-                .iter()
-                .find(|x| x.0 == c.target.expect("fuckin in slot_from"))
-                .expect("Got a none while trying to find the card dragggable.")
-                .0,
-        );
+        let slot_from_movethiscard = draggables
+            .iter()
+            .find(|x| x.0 == c.target.expect("fuckin in slot_from"));
+        if slot_from_movethiscard.is_none() {
+            println!("No CardDraggable found matching this MoveThisCard target.");
+            return;
+        }
         match c.moving {
             MoveState::StartMove => {
-                start_new_move(tx, slot_from_movethiscard, c, current_time, rng);
+                start_new_move(
+                    tx,
+                    Some(
+                        slot_from_movethiscard
+                            .expect("Somehow got past the early return on none")
+                            .0,
+                    ),
+                    c,
+                    current_time,
+                    rng,
+                );
             }
             MoveState::Moving => {
                 moving_stuff(tx, all_draggables, c, current_time);
@@ -359,15 +331,93 @@ fn _test_system(
 //this needs to be updated and all the clicking code moved into this so I can get rid of that
 //weird run_if thing in the setup.
 fn mouse_input(
+    mut commands: Commands,
     mouse_clicks: Res<Input<MouseButton>>,
-    mut drag: Res<Dragging>,
+    mut drag: ResMut<Dragging>,
     pos: Res<MousePosition>,
+    draggables: Query<(Entity, &Transform, &components::cards::CardDraggable)>,
 ) {
     if mouse_clicks.just_released(MouseButton::Left) {
         drag.draggable = None;
+        /*
+        commands.insert_resource(Dragging {
+            draggable: None,
+            offset: Vec2::ZERO,
+        });
+        */
+    }
+    if mouse_clicks.just_pressed(MouseButton::Left) {
+        let size = crate::components::cards::CARD_SIZE;
+        let mut distance = 0.0;
+        let mut selected: Option<(Entity, &Transform, &components::cards::CardDraggable)> = None;
+        for d in draggables.iter() {
+            let card_rect = Rect::from_center_size(d.1.translation.truncate(), size);
+            if !card_rect.contains(pos.0) {
+                continue;
+            }
+            let this_card_distance = pos.0.distance(d.1.translation.truncate());
+            if this_card_distance < distance {
+                continue;
+            }
+            distance = this_card_distance;
+            selected = Some(d);
+        }
+        if let Some((x, tx, cd)) = selected {
+            println!("Card selected: {:?}", selected);
+            drag.draggable = Some(x);
+            let current_card_pos = tx.translation.truncate();
+            commands.entity(x).insert(MoveThisCard {
+                target: Some(cd.card),
+                start_position: current_card_pos,
+                moving: MoveState::StartMove,
+                time_at_start_of_move: 0,
+                time_before_next_move: 0,
+                time_to_finish_move: 0,
+                rotation_freqs: (0, 1, 0),
+            });
+        }
+        println!("Mouse clicked at {}, {}", pos.0.x, pos.0.y);
     }
 }
-
+/*
+fn click_check_system(
+    mut commands: Commands,
+    pos: Res<MousePosition>,
+    mut selected_entity: ResMut<LastClickedEntity>,
+    clk: Query<(Entity, &Transform, &components::cards::CardDraggable)>,
+) {
+    let size = crate::components::cards::CARD_SIZE;
+    let mut distance = 0.0;
+    let mut selected: Option<(Entity, &Transform, &components::cards::CardDraggable)> = None;
+    for c in clk.iter() {
+        let card_rect = Rect::from_center_size(c.1.translation.truncate(), size);
+        if !card_rect.contains(pos.0) {
+            continue;
+        }
+        let this_card_distance = pos.0.distance(c.1.translation.truncate());
+        if this_card_distance < distance {
+            continue;
+        }
+        distance = this_card_distance;
+        selected = Some(c);
+    }
+    if let Some((x, tx, cd)) = selected {
+        println!("Card selected: {:?}", selected);
+        selected_entity.0 = Some(x);
+        let current_card_pos = tx.translation.truncate();
+        commands.entity(x).insert(MoveThisCard {
+            target: Some(cd.card),
+            start_position: current_card_pos,
+            moving: MoveState::StartMove,
+            time_at_start_of_move: 0,
+            time_before_next_move: 0,
+            time_to_finish_move: 0,
+            rotation_freqs: (0, 1, 0),
+        });
+    }
+    println!("Mouse clicked at {}, {}", pos.0.x, pos.0.y);
+}
+*/
 fn keyboard_input(
     mut commands: Commands,
     keys: Res<Input<KeyCode>>,
