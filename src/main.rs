@@ -277,8 +277,9 @@ fn moving_stuff(
         .expect("Got a none trying to unwrap an (&entity, &transform) in moving_stuff")
         .1
         .translation;
-    let percent_of_move_done: f32 = (t - c.time_at_start_of_move) as f32
-        / (c.time_to_finish_move - c.time_at_start_of_move) as f32;
+    let time_since_start_of_move = (c.time_to_finish_move - c.time_at_start_of_move) as f32;
+    let percent = (t - c.time_at_start_of_move) as f32 / time_since_start_of_move;
+    let percent_of_move_done: f32 = if percent >= 1.0 { 1.0 } else { percent };
     let location: Vec2 = c
         .start_position
         .lerp(current_move_target.truncate(), percent_of_move_done);
@@ -548,7 +549,7 @@ fn setup(
             start_position: initial_position.truncate(),
             moving: MoveState::StartMove,
             time_at_start_of_move: time.elapsed().as_millis(),
-            time_to_finish_move: time.elapsed().as_millis() + 2000,
+            time_to_finish_move: time.elapsed().as_millis() + 1000,
             rotation_freqs: (
                 rng.gen_range(-1..=1),
                 rng.gen_range(-1..=1),
