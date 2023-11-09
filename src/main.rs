@@ -40,9 +40,6 @@ fn main() {
                 mouse_input,
                 mouse_position_system,
                 drag,
-                // This is probably not a good way to do this, will have to reasearch more about
-                // better ways to handel input later
-                //click_check_system.run_if(bevy::input::common_conditions::input_just_pressed(MouseButton::Left, )),
             ),
         )
         .run();
@@ -64,13 +61,14 @@ fn mouse_position_system(
         .map(|ray| ray.origin.truncate())
     {
         pos.0 = world_pos;
-        //println!("pos is {}, {}", world_pos.x, world_pos.y);
     }
 }
 
 #[derive(Resource, Default)]
 struct LastClickedEntity(Option<Entity>);
 
+// Really gotta clean up this struct, I think the way I'm using this, card_id and draggable are the
+// same entity.
 #[derive(Resource, Default)]
 struct Dragging {
     draggable: Option<Entity>,
@@ -81,7 +79,6 @@ struct Dragging {
 }
 
 fn drag(
-    //mut commands: Commands,
     pos: Res<MousePosition>,
     last_clicked: Res<Dragging>,
     mut draggables: Query<(Entity, &mut Transform, &components::cards::CardDraggable)>,
@@ -99,11 +96,6 @@ fn drag(
 
 #[derive(Component)]
 struct Clickable;
-
-//The start of this is all fixed now so the visual cards move towards the
-//draggable cards, I still have to fix this so it stops crashing and
-//write it so you can click and drag the draggables and then the visual
-//cards just move at the end of the click and drag.
 
 #[derive(Reflect, Clone, Copy, Debug)]
 struct Slot {
@@ -139,14 +131,14 @@ fn generate_board(mut commands: Commands) {
     let card_spacing = Vec2::new(card_width + PADDING, 0.0);
     let board_width = (card_width * 7.0) + (PADDING * 6.0);
     let p = Vec2::new(board_width / -2.0, 0.0);
-    let s = spawn_slot(p);
+    let s = build_slot_to_spawn(p);
     pos.stock_pile = Some(Slot {
         position: p,
         slot: s.1,
     });
     commands.spawn(s);
     let p = p + card_spacing;
-    let s = spawn_slot(p);
+    let s = build_slot_to_spawn(p);
     pos.waste_pile = Some(Slot {
         position: p,
         slot: s.1,
@@ -156,7 +148,7 @@ fn generate_board(mut commands: Commands) {
     let p = p + card_spacing;
     for i in 0..4 {
         let p = p + (card_spacing * i as f32);
-        let s = spawn_slot(p);
+        let s = build_slot_to_spawn(p);
         pos.foundations[i] = Some(Slot {
             position: p,
             slot: s.1,
@@ -170,7 +162,7 @@ fn generate_board(mut commands: Commands) {
     );
     for i in 0..7 {
         let p = p + (card_spacing * i as f32);
-        let s = spawn_slot(p);
+        let s = build_slot_to_spawn(p);
         pos.tableau[i] = Some(Slot {
             position: p,
             slot: s.1,
@@ -179,7 +171,7 @@ fn generate_board(mut commands: Commands) {
     }
 }
 
-fn spawn_slot(pos: Vec2) -> (SpatialBundle, components::cards::CardSlot) {
+fn build_slot_to_spawn(pos: Vec2) -> (SpatialBundle, components::cards::CardSlot) {
     let slot: components::cards::CardSlot = components::cards::CardSlot;
     (
         bevy::prelude::SpatialBundle {
@@ -340,7 +332,6 @@ fn mouse_input(
         if drag.card_id.is_none() {
             return;
         }
-        //gotta rename this cause its the draggable, that whole struct needs to be cleaned up
         let the_card_id = drag
             .card_id
             .expect("None card_id when trying to build MoveThisCard");
@@ -351,15 +342,6 @@ fn mouse_input(
         commands.entity(the_card_draggable).insert(MoveThisCard {
             target: Some(the_card_id),
             start_position: drag.card_start_position,
-            /*
-            draggables
-                .iter()
-                .find(|x| x.0 == the_card_id)
-                .expect("failed to find entity id to extract start position")
-                .1
-                .translation
-                .truncate(),
-            */
             moving: MoveState::StartMove,
             time_at_start_of_move: time.elapsed().as_millis(),
             time_to_finish_move: time.elapsed().as_millis() + 300,
@@ -406,7 +388,7 @@ fn keyboard_input(
     mut cards: Query<(&mut Transform, &mut components::cards::CardVisual)>,
     gizmos_toggle: Res<inspector::GizmosDraw>,
 ) {
-    let the_cards = &mut cards; //.iter();
+    let the_cards = &mut cards;
     let it = &mut the_cards.iter_mut();
     let mut index: usize = current.0;
     if keys.just_pressed(KeyCode::Space) {
@@ -550,11 +532,7 @@ fn setup(
             moving: MoveState::StartMove,
             time_at_start_of_move: time.elapsed().as_millis(),
             time_to_finish_move: time.elapsed().as_millis() + 1000,
-            rotation_freqs: (
-                rng.gen_range(-1..=1),
-                rng.gen_range(-1..=1),
-                0, //rng.gen_range(0..=1),
-            ),
+            rotation_freqs: (rng.gen_range(-1..=1), rng.gen_range(-1..=1), 0),
         });
     }
 }
