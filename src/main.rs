@@ -103,7 +103,9 @@ struct Slot {
     slot: components::cards::CardSlot,
 }
 
-#[derive(Reflect, Clone, Copy, Debug)]
+//will probably just switch to using components for each type of card pile, seems like a better,
+//cleaner way to do this then screwing around with whatever I was thinking about here.
+#[derive(Resource, Reflect, Clone, Copy, Debug, Default)]
 struct CardSlotPositions {
     stock_pile: Option<Slot>,
     waste_pile: Option<Slot>,
@@ -169,6 +171,7 @@ fn generate_board(mut commands: Commands) {
         });
         commands.spawn(s);
     }
+    commands.insert_resource(pos);
 }
 
 fn build_slot_to_spawn(pos: Vec2) -> (SpatialBundle, components::cards::CardSlot) {
@@ -384,6 +387,7 @@ fn mouse_input(
 fn keyboard_input(
     mut commands: Commands,
     keys: Res<Input<KeyCode>>,
+    test: Res<CardSlotPositions>,
     current: Res<components::cards::CurrentCard>,
     mut cards: Query<(&mut Transform, &mut components::cards::CardVisual)>,
     gizmos_toggle: Res<inspector::GizmosDraw>,
@@ -408,8 +412,11 @@ fn keyboard_input(
         let t = it.nth(index);
         let temp = t.expect("shit");
         let (mut temp2, _) = temp;
-        println!("{:?}", temp2);
+        println!("{:#?}", temp2);
         temp2.translation = temp2.translation + temp2.local_x() * 25.0;
+    }
+    if keys.just_pressed(KeyCode::G) {
+        println!("{:#?}", test);
     }
     if keys.just_pressed(KeyCode::D) {
         commands.insert_resource(inspector::GizmosDraw(!gizmos_toggle.0));
