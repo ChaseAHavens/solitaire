@@ -13,7 +13,7 @@ fn main() {
         .add_plugins(EguiPlugin)
         .add_plugins(DefaultInspectorConfigPlugin)
         .add_plugins(inspector::InspectorPlugin)
-        .add_plugins(crate::systems::cards::CardsPlugin)
+        .add_plugins(systems::cards::CardsPlugin)
         .register_type::<components::cards::CardSuit>()
         .register_type::<components::cards::CardColor>()
         .register_type::<components::cards::CardVisual>()
@@ -75,7 +75,7 @@ struct Dragging {
     offset: Vec2,
     card_start_position: Vec2,
     card_id: Option<Entity>,
-    card_draggable: crate::components::cards::CardDraggable,
+    card_draggable: components::cards::CardDraggable,
 }
 
 fn drag(
@@ -128,8 +128,9 @@ impl CardSlotPositions {
 const PADDING: f32 = 7.0;
 
 fn generate_board(mut commands: Commands) {
-    let mut pos: CardSlotPositions = CardSlotPositions::new();
-    let card_width = crate::components::cards::CARD_SIZE.x;
+    use components::cards::CARD_SIZE;
+    let mut pos = CardSlotPositions::new();
+    let card_width = CARD_SIZE.x;
     let card_spacing = Vec2::new(card_width + PADDING, 0.0);
     let board_width = (card_width * 7.0) + (PADDING * 6.0);
     let p = Vec2::new(board_width / -2.0, 0.0);
@@ -158,10 +159,7 @@ fn generate_board(mut commands: Commands) {
         commands.spawn(s);
     }
     //second row
-    let p = Vec2::new(
-        board_width / -2.0,
-        -(crate::components::cards::CARD_SIZE.y + PADDING),
-    );
+    let p = Vec2::new(board_width / -2.0, -(CARD_SIZE.y + PADDING));
     for i in 0..7 {
         let p = p + (card_spacing * i as f32);
         let s = build_slot_to_spawn(p);
@@ -175,7 +173,7 @@ fn generate_board(mut commands: Commands) {
 }
 
 fn build_slot_to_spawn(pos: Vec2) -> (SpatialBundle, components::cards::CardSlot) {
-    let slot: components::cards::CardSlot = components::cards::CardSlot;
+    let slot = components::cards::CardSlot;
     (
         bevy::prelude::SpatialBundle {
             transform: Transform {
@@ -353,12 +351,13 @@ fn mouse_input(
         drag.draggable = None;
     }
     if mouse_clicks.just_pressed(MouseButton::Left) {
-        let size = crate::components::cards::CARD_SIZE;
+        use components::cards;
+        let size = cards::CARD_SIZE;
         //I can tell I'm messing up with the distance mesaure, its not always grabbing the center
         //of the cards, this might be the upper left corner, but this needs to all be replaced
         //anyway and just grab cards by the highest z card that you click on.
         let mut distance = 0.0;
-        let mut selected: Option<(Entity, &Transform, &components::cards::CardDraggable)> = None;
+        let mut selected: Option<(Entity, &Transform, &cards::CardDraggable)> = None;
         for d in draggables.iter() {
             let card_rect = Rect::from_center_size(d.1.translation.truncate(), size);
             if !card_rect.contains(pos.0) {
@@ -372,7 +371,8 @@ fn mouse_input(
             selected = Some(d);
         }
         if let Some((x, tx, cd)) = selected {
-            println!("Card selected: {:?}", selected);
+            //println!("Card selected: {:?}", selected);
+            dbg!(selected);
             drag.draggable = Some(x);
             let current_card_pos = tx.translation.truncate();
             drag.offset = pos.0 - current_card_pos;
@@ -433,10 +433,11 @@ fn setup(
     commands.spawn(Camera2dBundle::default());
     let rng = &mut rand::thread_rng();
     for i in 0..52 {
+        use components::cards::{self, CardColor, CardSuit, CardVisual, CARD_SIZE};
         let texture_handle = asset_server.load("cards.png");
         let texture_atlas = TextureAtlas::from_grid(
             texture_handle,
-            components::cards::CARD_SIZE,
+            CARD_SIZE,
             13,
             4,
             Some(Vec2::new(3.0, 3.0)),
@@ -447,34 +448,34 @@ fn setup(
         let color;
         match i {
             (0..=12) => {
-                suit = components::cards::CardSuit::Hearts;
-                color = components::cards::CardColor::Red;
+                suit = CardSuit::Hearts;
+                color = CardColor::Red;
             }
             (13..=25) => {
-                suit = components::cards::CardSuit::Spades;
-                color = components::cards::CardColor::Black;
+                suit = CardSuit::Spades;
+                color = CardColor::Black;
             }
             (26..=39) => {
-                suit = components::cards::CardSuit::Diamonds;
-                color = components::cards::CardColor::Red;
+                suit = CardSuit::Diamonds;
+                color = CardColor::Red;
             }
             (40..=52) => {
-                suit = components::cards::CardSuit::Clubs;
-                color = components::cards::CardColor::Black;
+                suit = CardSuit::Clubs;
+                color = CardColor::Black;
             }
             _ => {
-                suit = components::cards::CardSuit::Hearts;
-                color = components::cards::CardColor::Black;
+                suit = CardSuit::Hearts;
+                color = CardColor::Black;
                 println!("got out of range when generating cards")
             }
         }
-        let c: components::cards::CardVisual = components::cards::CardVisual {
+        let c = CardVisual {
             index: i + 1,
             number: (i % 13) + 1,
             suit,
             color,
         };
-        let initial_position: Vec3 = Vec3::new(
+        let initial_position = Vec3::new(
             rng.gen_range(-300.0..=300.0),
             rng.gen_range(-300.0..=300.0),
             rng.gen_range(-300.0..=300.0),
@@ -501,7 +502,7 @@ fn setup(
                         },
                         ..default()
                     },
-                    components::cards::CardFront,
+                    cards::CardFront,
                 ));
             })
             .with_children(|parent| {
@@ -515,7 +516,7 @@ fn setup(
 
                         ..default()
                     },
-                    components::cards::CardBack,
+                    cards::CardBack,
                 ));
             })
             .id();
@@ -528,8 +529,8 @@ fn setup(
                     },
                     ..default()
                 },
-                crate::inspector::DebugRect,
-                crate::components::cards::CardDraggable { card: Some(ent) },
+                inspector::DebugRect,
+                cards::CardDraggable { card: Some(ent) },
                 Clickable,
             ))
             .id();
