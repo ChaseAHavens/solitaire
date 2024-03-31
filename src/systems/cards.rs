@@ -40,4 +40,3 @@ pub fn card_visual_keep_back_up(
         };
     }
 }
-

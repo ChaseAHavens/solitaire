@@ -1,3 +1,5 @@
+use std::usize;
+
 use bevy::{prelude::KeyCode, prelude::*};
 use bevy_egui::EguiPlugin;
 use bevy_inspector_egui::DefaultInspectorConfigPlugin;
@@ -40,6 +42,7 @@ fn main() {
                 mouse_input,
                 mouse_position_system,
                 drag,
+                card_stacking,
             ),
         )
         .run();
@@ -91,7 +94,7 @@ fn drag(
         .find(|x| Some(x.0) == last_clicked.draggable)
         .expect("Draggable saved in Dragging doesnt match any CardDraggables queried.");
     let f = pos.0 - last_clicked.offset;
-    drag_tx.translation = Vec3::new(f.x, f.y, 0.0);
+    drag_tx.translation = f.extend(drag_tx.translation.z); //Vec3::new(f.x, f.y, 0.0);
 }
 
 #[derive(Component)]
@@ -208,40 +211,81 @@ fn move_cards(
     mut commands: Commands,
     time: Res<Time>,
     mut move_card: Query<(Entity, &mut Transform, &mut MoveThisCard)>,
-    draggables: Query<
-        (Entity, &Transform, &components::cards::CardDraggable),
+    mut draggables: Query<
+        (Entity, &mut Transform, &components::cards::CardDraggable),
         Without<MoveThisCard>,
     >,
 ) {
+    //: Vec<(Entity, &mut Transform, &components::cards::CardDraggable)> =
+
+    let top_of_the_stack = 500.0;
+    //let mut draggables = draggables.into_iter();
+
     let current_time = time.elapsed().as_millis();
     for (ea, mut txa, mut ca) in &mut move_card.iter_mut() {
         let tx = txa.as_mut();
         let c = ca.as_mut();
-        let all_draggables: Vec<(Entity, &Transform)> =
-            draggables.iter().map(|x| (x.0, x.1)).collect();
-
-        let slot_from_movethiscard = draggables
+        //let mut all_draggables: Vec<(Entity, &Transform)> =
+        //    draggables.into_iter().map(|x| (x.0, x.1)).collect();
+        //println!("{:?}", draggables);
+        let slot_entity_from_movethiscard = draggables
             .iter()
-            .find(|x| x.0 == c.target.expect("fuckin in slot_from"));
-        if slot_from_movethiscard.is_none() {
-            println!("No CardDraggable found matching this MoveThisCard target.");
-            return;
-        }
+            .find(|x| x.0 == c.target.expect("fuckin in slot_from"))
+            .expect("No CardDraggable found matching this MoveThisCard target.")
+            .0;
         match c.moving {
             MoveState::StartMove => {
+                tx.translation.z = top_of_the_stack;
+
+                let mut depth_list: Vec<(Entity, f32)> = Vec::new();
+                for x in draggables.iter() {
+                    depth_list.push((
+                        x.0,
+                        if x.0 == c.target.expect("target missing") {
+                            top_of_the_stack
+                        } else {
+                            x.1.translation.z
+                        },
+                    ));
+                }
+                //eprintln!("before = {:#?}", depth_list);
+                depth_list.sort_by(|a, b| a.1.total_cmp(&b.1));
+                //eprintln!("after = {:#?}", depth_list);
+                for mut v in draggables.iter_mut() {
+                    v.1.translation.z = depth_list
+                        .iter()
+                        .enumerate()
+                        .find(|x| v.0 == x.1 .0)
+                        .expect("still not findind matching id's in draggables and depth list")
+                        .0 as f32;
+                }
+
+                // println!("{:#?}", tx);
                 start_new_move(
                     tx,
+                    Some(slot_entity_from_movethiscard),
+                    /*
                     Some(
                         slot_from_movethiscard
                             .expect("Somehow got past the early return on none")
                             .0,
                     ),
+                    */
                     c,
                     current_time,
                 );
+                /*let draggables = draggables
+                    .iter_mut()
+                    .collect()
+                    .sort_by(|a, b| a.1.translation.z.total_cmp(&b.1.translation.z));
+                fo:r (i, el) in draggables.iter_mut().enumerate() {
+                    el.1.translation.z = i as f32;
+                }
+                */
+                //sort_stack(all_draggables);
             }
             MoveState::Moving => {
-                moving_stuff(tx, all_draggables, c, current_time);
+                moving_stuff(tx, draggables.iter().collect(), c, current_time);
             }
             MoveState::EndMove => {
                 c.moving = MoveState::RemoveComponent;
@@ -254,9 +298,62 @@ fn move_cards(
     }
 }
 
+fn card_stacking(
+    mut draggables: Query<(Entity, &mut Transform, &components::cards::CardDraggable)>,
+    mut card_visuals: Query<
+        (Entity, &mut Transform, &components::cards::CardVisual),
+        Without<components::cards::CardDraggable>,
+    >,
+) {
+    // let mut x: Vec<(Entity, f32, Option<Entity>)> = Vec::new();
+    // for n in draggables.iter() {
+    //     x.push((n.0, n.1.translation.z, n.2.card));
+    // }
+    // x.sort_by(|a, b| a.1.total_cmp(&b.1));
+    // let mut x2 = (0..).zip(x.iter_mut());
+    // let mut cv_iter = card_visuals.iter_mut();
+    // for mut n in draggables.iter_mut() {
+    //     let temp = x2.find(|p| (p.1).0 == n.0);
+    //     if let Some(this_z) = temp {
+    //         n.1.translation.z = this_z.0 as f32;
+    //         if let Some(c) = n.2.card {
+    //             cv_iter.find(|x| x.0 == c).expect("fuck").1.translation.z = this_z.0 as f32;
+    //         }
+    //     }
+    // }
+    let mut drag: Vec<(Entity, f32, Option<Entity>)> = draggables
+        .iter_mut()
+        .map(|d| (d.0, d.1.translation.z, d.2.card))
+        .collect();
+    drag.sort_by(|a, b| a.1.total_cmp(&b.1));
+    let drag = (0..).zip(drag);
+    drag.for_each(|d| {
+        draggables
+            .iter_mut()
+            .find(|a| a.0 == d.1 .0)
+            .unwrap()
+            .1
+            .translation
+            .z = d.0 as f32;
+        card_visuals
+            .iter_mut()
+            .find(|a| a.0 == d.1 .2.unwrap())
+            .unwrap()
+            .1
+            .translation
+            .z = d.0 as f32;
+    });
+}
+
+/*
+fn sort_stack(mut stack: Vec<(Entity, &mut Transform)>) {
+    stack.sort_by(|a, b| a.1.translation.z.total_cmp(&b.1.translation.z));
+}
+*/
+
 fn moving_stuff(
     tx: &mut Transform,
-    targets: Vec<(Entity, &Transform)>,
+    targets: Vec<(Entity, &Transform, &components::cards::CardDraggable)>,
     c: &mut MoveThisCard,
     t: u128,
 ) {
@@ -272,11 +369,12 @@ fn moving_stuff(
         .translation;
     let time_since_start_of_move = (c.time_to_finish_move - c.time_at_start_of_move) as f32;
     let percent = (t - c.time_at_start_of_move) as f32 / time_since_start_of_move;
-    let percent_of_move_done: f32 = if percent >= 1.0 { 1.0 } else { percent };
-    let location: Vec2 = c
+    let percent_of_move_done: f32 = percent.clamp(0.0, 1.0); //if percent >= 1.0 { 1.0 } else { percent };
+    let location: Vec3 = c
         .start_position
-        .lerp(current_move_target.truncate(), percent_of_move_done);
-    tx.translation = location.extend(tx.translation.z);
+        .extend(current_move_target.z)
+        .lerp(current_move_target, percent_of_move_done);
+    tx.translation = location;
     let x = (c.rotation_freqs.0 as f32 * (percent_of_move_done * 360.0)) % 360.0;
     let y = (c.rotation_freqs.1 as f32 * (percent_of_move_done * 360.0)) % 360.0;
     let z = (c.rotation_freqs.2 as f32 * (percent_of_move_done * 360.0)) % 360.0;
@@ -478,7 +576,7 @@ fn setup(
         let initial_position = Vec3::new(
             rng.gen_range(-300.0..=300.0),
             rng.gen_range(-300.0..=300.0),
-            rng.gen_range(-300.0..=300.0),
+            rng.gen_range(-300.0..=0.0),
         );
 
         let ent = commands
